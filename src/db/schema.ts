@@ -9,6 +9,7 @@ import {
   jsonb,
   pgEnum,
 } from 'drizzle-orm/pg-core'
+import { relations } from 'drizzle-orm'
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -70,12 +71,24 @@ export const verifications = pgTable('verifications', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 })
 
+// ─── States ───────────────────────────────────────────────────────────────────
+
+export const states = pgTable('states', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull().unique(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+})
+
 // ─── Cities ───────────────────────────────────────────────────────────────────
 
 export const cities = pgTable('cities', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
   shortCode: text('short_code').notNull().unique(),
+  stateId: uuid('state_id')
+    .notNull()
+    .references(() => states.id),
+  status: text('status', { enum: ['active', 'inactive'] }).notNull().default('active'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 })
@@ -190,3 +203,52 @@ export const siteSnapshots = pgTable('site_snapshots', {
   materials: jsonb('materials'),
   expenses: jsonb('expenses'),
 })
+
+// ─── Relations ────────────────────────────────────────────────────────────────
+
+export const statesRelations = relations(states, ({ many }) => ({
+  cities: many(cities),
+}))
+
+export const citiesRelations = relations(cities, ({ one, many }) => ({
+  state: one(states, { fields: [cities.stateId], references: [states.id] }),
+  sites: many(sites),
+  employees: many(employees),
+}))
+
+export const sitesRelations = relations(sites, ({ one, many }) => ({
+  city: one(cities, { fields: [sites.cityId], references: [cities.id] }),
+  siteWorkTypes: many(siteWorkTypes),
+  siteSupervisorAssignments: many(siteSupervisorAssignments),
+  siteSnapshots: many(siteSnapshots),
+}))
+
+export const workTypesRelations = relations(workTypes, ({ many }) => ({
+  siteWorkTypes: many(siteWorkTypes),
+}))
+
+export const siteWorkTypesRelations = relations(siteWorkTypes, ({ one }) => ({
+  site: one(sites, { fields: [siteWorkTypes.siteId], references: [sites.id] }),
+  workType: one(workTypes, { fields: [siteWorkTypes.workTypeId], references: [workTypes.id] }),
+}))
+
+export const siteSupervisorAssignmentsRelations = relations(
+  siteSupervisorAssignments,
+  ({ one }) => ({
+    site: one(sites, { fields: [siteSupervisorAssignments.siteId], references: [sites.id] }),
+    employee: one(employees, {
+      fields: [siteSupervisorAssignments.employeeId],
+      references: [employees.id],
+    }),
+  })
+)
+
+export const siteSnapshotsRelations = relations(siteSnapshots, ({ one }) => ({
+  site: one(sites, { fields: [siteSnapshots.siteId], references: [sites.id] }),
+}))
+
+export const employeesRelations = relations(employees, ({ one, many }) => ({
+  user: one(users, { fields: [employees.userId], references: [users.id] }),
+  city: one(cities, { fields: [employees.cityId], references: [cities.id] }),
+  siteSupervisorAssignments: many(siteSupervisorAssignments),
+}))
