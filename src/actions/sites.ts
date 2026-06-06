@@ -121,7 +121,7 @@ export async function getSupervisorEmployees() {
     .select({ employee: employees, userName: users.name, userEmail: users.email })
     .from(employees)
     .innerJoin(users, eq(employees.userId, users.id))
-    .where(eq(users.role, 'supervisor'))
+    .where(and(eq(users.role, 'supervisor'), eq(employees.status, 'active')))
 }
 
 export async function assignSupervisorToSite(siteId: string, employeeId: string) {

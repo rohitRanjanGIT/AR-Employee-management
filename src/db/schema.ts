@@ -27,6 +27,7 @@ export const users = pgTable('users', {
   emailVerified: boolean('email_verified').notNull().default(false),
   image: text('image'),
   role: roleEnum('role').notNull().default('supervisor'),
+  status: text('status', { enum: ['active', 'inactive'] }).notNull().default('active'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 })
@@ -109,6 +110,7 @@ export const employees = pgTable('employees', {
   aadhaarRevealLogs: jsonb('aadhaar_reveal_logs').default('[]'),
   salaryMonthly: decimal('salary_monthly', { precision: 12, scale: 2 }),
   cityId: uuid('city_id').references(() => cities.id),
+  status: text('status', { enum: ['active', 'inactive'] }).notNull().default('active'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 })

@@ -8,6 +8,7 @@ const navItems = [
   { label: 'Dashboard', href: '/admin/dashboard' },
   { label: 'Cities', href: '/admin/cities' },
   { label: 'Sites', href: '/admin/sites' },
+  { label: 'Supervisors', href: '/admin/supervisors' },
   { label: 'Work Types', href: '/admin/work-types' },
 ]
 

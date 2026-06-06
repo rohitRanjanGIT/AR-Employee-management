@@ -18,6 +18,8 @@ export default async function SupervisorLayout({ children }: { children: React.R
     .where(eq(employees.userId, session.user.id))
     .limit(1)
 
+  if (employee?.status === 'inactive') redirect('/login')
+
   const displayName = employee?.name ?? session.user.name
 
   return (
