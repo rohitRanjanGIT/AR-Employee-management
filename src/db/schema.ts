@@ -253,4 +253,13 @@ export const employeesRelations = relations(employees, ({ one, many }) => ({
   user: one(users, { fields: [employees.userId], references: [users.id] }),
   city: one(cities, { fields: [employees.cityId], references: [cities.id] }),
   siteSupervisorAssignments: many(siteSupervisorAssignments),
+  submittedWorkers: many(workers),
+}))
+
+export const workersRelations = relations(workers, ({ one }) => ({
+  city: one(cities, { fields: [workers.cityId], references: [cities.id] }),
+  submittedByEmployee: one(employees, {
+    fields: [workers.submittedBy],
+    references: [employees.id],
+  }),
 }))

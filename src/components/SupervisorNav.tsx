@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 const navItems = [
   { label: 'Dashboard', href: '/supervisor/dashboard' },
   { label: 'Sites', href: '/supervisor/sites' },
+  { label: 'Workers', href: '/supervisor/workers' },
 ]
 
 export function SupervisorNav() {

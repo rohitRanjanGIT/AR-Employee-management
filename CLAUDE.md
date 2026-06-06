@@ -246,12 +246,13 @@ Receives `(checked: boolean, event: Event)` — not just `boolean`.
 | 1.0 Foundation | ✅ Done | DB schema, auth, login, dashboards, seed, middleware |
 | 1.1 Cities & Sites | ✅ Done | States, cities (with autocomplete), work types, sites, supervisor assignment, deactivation, snapshots |
 | 1.1.5 Supervisors | ✅ Done | Create/edit supervisor accounts, view table, deactivate/reactivate, status blocks login, seed creates complete setup |
+| 1.2 Workers | ✅ Done | Aadhaar encryption, admin create/approve/reject/reassign, supervisor submit/resubmit, masked Aadhaar with 30s reveal log, tabbed supervisor UI |
 
 Full specs in `docs/modules/`.
 
 ## Modules planned (not started)
 
-- 1.2 Workers
+- 1.3 Attendance
 - 1.3 Attendance
 - 1.4 Wages
 - 1.5 Materials
