@@ -1,0 +1,15 @@
+# better-auth 1.6.14's kysely-adapter imports DEFAULT_MIGRATION_LOCK_TABLE,
+# which kysely removed in 0.29. Pin to the 0.28 line until upstream fixes it.
+overrides:
+  kysely: 0.28.17
+allowBuilds:
+  esbuild: true
+  msw: true
+  sharp: true
+  unrs-resolver: true
+onlyBuiltDependencies:
+  - sharp
+  - unrs-resolver
+  - esbuild
+  - "@swc/core"
+  - lightningcss
