@@ -30,8 +30,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { createWorkType } from '@/actions/work-types'
-import { Plus } from 'lucide-react'
+import { createWorkType, updateWorkType, deleteWorkType } from '@/actions/work-types'
+import { Plus, Pencil, Trash2 } from 'lucide-react'
 
 type WorkType = { id: string; name: string; createdAt: Date }
 
@@ -39,63 +39,124 @@ const schema = z.object({ name: z.string().min(1, 'Name is required').max(100) }
 type FormValues = z.infer<typeof schema>
 
 const col = createColumnHelper<WorkType>()
-const columns = [
-  col.accessor('name', { header: 'Name' }),
-  col.accessor('createdAt', {
-    header: 'Created At',
-    cell: (info) => new Date(info.getValue()).toLocaleDateString(),
-  }),
-]
 
 export function WorkTypesClient({ workTypes }: { workTypes: WorkType[] }) {
   const router = useRouter()
-  const [open, setOpen] = useState(false)
-  const [serverError, setServerError] = useState('')
-  const [isPending, startTransition] = useTransition()
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<FormValues>({ resolver: zodResolver(schema) })
+  // Create
+  const [createOpen, setCreateOpen] = useState(false)
+  const [createError, setCreateError] = useState('')
+  const [isCreating, startCreate] = useTransition()
+  const createForm = useForm<FormValues>({ resolver: zodResolver(schema) })
 
-  const table = useReactTable({ data: workTypes, columns, getCoreRowModel: getCoreRowModel() })
+  // Edit
+  const [editTarget, setEditTarget] = useState<WorkType | null>(null)
+  const [editError, setEditError] = useState('')
+  const [isEditing, startEdit] = useTransition()
+  const editForm = useForm<FormValues>({ resolver: zodResolver(schema) })
 
-  function onSubmit(values: FormValues) {
-    setServerError('')
-    startTransition(async () => {
+  // Delete
+  const [deleteTarget, setDeleteTarget] = useState<WorkType | null>(null)
+  const [deleteError, setDeleteError] = useState('')
+  const [isDeleting, startDelete] = useTransition()
+
+  function onCreateSubmit(values: FormValues) {
+    setCreateError('')
+    startCreate(async () => {
       try {
         await createWorkType(values)
-        reset()
-        setOpen(false)
+        createForm.reset()
+        setCreateOpen(false)
         router.refresh()
       } catch (e) {
-        setServerError(e instanceof Error ? e.message : 'Something went wrong')
+        setCreateError(e instanceof Error ? e.message : 'Something went wrong')
       }
     })
   }
+
+  function openEdit(wt: WorkType) {
+    setEditTarget(wt)
+    editForm.setValue('name', wt.name)
+    setEditError('')
+  }
+
+  function onEditSubmit(values: FormValues) {
+    if (!editTarget) return
+    setEditError('')
+    startEdit(async () => {
+      try {
+        await updateWorkType(editTarget.id, values)
+        setEditTarget(null)
+        router.refresh()
+      } catch (e) {
+        setEditError(e instanceof Error ? e.message : 'Something went wrong')
+      }
+    })
+  }
+
+  function onDeleteConfirm() {
+    if (!deleteTarget) return
+    setDeleteError('')
+    startDelete(async () => {
+      try {
+        await deleteWorkType(deleteTarget.id)
+        setDeleteTarget(null)
+        router.refresh()
+      } catch (e) {
+        setDeleteError(e instanceof Error ? e.message : 'Something went wrong')
+      }
+    })
+  }
+
+  const columns = [
+    col.accessor('name', { header: 'Name' }),
+    col.accessor('createdAt', {
+      header: 'Created At',
+      cell: (info) => new Date(info.getValue()).toLocaleDateString(),
+    }),
+    col.display({
+      id: 'actions',
+      header: '',
+      cell: ({ row }) => (
+        <div className="flex items-center gap-1 justify-end">
+          <Button variant="ghost" size="sm" onClick={() => openEdit(row.original)}>
+            <Pencil className="size-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            onClick={() => { setDeleteTarget(row.original); setDeleteError('') }}
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        </div>
+      ),
+    }),
+  ]
+
+  const table = useReactTable({ data: workTypes, columns, getCoreRowModel: getCoreRowModel() })
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Work Types</h1>
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger render={<Button><Plus className="size-4" />Add Work Type</Button>} />
           <DialogContent>
             <DialogTitle>Add Work Type</DialogTitle>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-2">
+            <form onSubmit={createForm.handleSubmit(onCreateSubmit)} className="space-y-4 mt-2">
               <div className="space-y-1.5">
                 <Label htmlFor="wt-name">Name</Label>
-                <Input id="wt-name" {...register('name')} placeholder="e.g. General Construction" />
-                {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+                <Input id="wt-name" {...createForm.register('name')} placeholder="e.g. General Construction" />
+                {createForm.formState.errors.name && (
+                  <p className="text-xs text-destructive">{createForm.formState.errors.name.message}</p>
+                )}
               </div>
-              {serverError && <p className="text-xs text-destructive">{serverError}</p>}
+              {createError && <p className="text-xs text-destructive">{createError}</p>}
               <DialogFooter>
                 <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
-                <Button type="submit" disabled={isPending}>
-                  {isPending ? 'Saving…' : 'Save'}
-                </Button>
+                <Button type="submit" disabled={isCreating}>{isCreating ? 'Saving…' : 'Save'}</Button>
               </DialogFooter>
             </form>
           </DialogContent>
@@ -128,6 +189,44 @@ export function WorkTypesClient({ workTypes }: { workTypes: WorkType[] }) {
           </Table>
         </div>
       )}
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editTarget} onOpenChange={(o) => { if (!o) setEditTarget(null) }}>
+        <DialogContent>
+          <DialogTitle>Edit Work Type</DialogTitle>
+          <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4 mt-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="wt-edit-name">Name</Label>
+              <Input id="wt-edit-name" {...editForm.register('name')} />
+              {editForm.formState.errors.name && (
+                <p className="text-xs text-destructive">{editForm.formState.errors.name.message}</p>
+              )}
+            </div>
+            {editError && <p className="text-xs text-destructive">{editError}</p>}
+            <DialogFooter>
+              <DialogClose render={<Button variant="outline" type="button" disabled={isEditing} />}>Cancel</DialogClose>
+              <Button type="submit" disabled={isEditing}>{isEditing ? 'Saving…' : 'Save Changes'}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirm Dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) setDeleteTarget(null) }}>
+        <DialogContent>
+          <DialogTitle>Delete Work Type</DialogTitle>
+          <p className="text-sm text-muted-foreground mt-1">
+            Delete <span className="font-medium text-foreground">{deleteTarget?.name}</span>? This cannot be undone.
+          </p>
+          {deleteError && <p className="text-xs text-destructive mt-2">{deleteError}</p>}
+          <DialogFooter className="mt-4">
+            <DialogClose render={<Button variant="outline" type="button" disabled={isDeleting} />}>Cancel</DialogClose>
+            <Button variant="destructive" onClick={onDeleteConfirm} disabled={isDeleting}>
+              {isDeleting ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

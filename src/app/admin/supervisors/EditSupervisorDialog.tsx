@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useEffect } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -59,7 +59,9 @@ export function EditSupervisorDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const router = useRouter()
-  const [selectedCityName, setSelectedCityName] = useState('')
+  const [selectedCityName, setSelectedCityName] = useState(
+    supervisor?.homeCity?.name ?? ''
+  )
   const [serverError, setServerError] = useState('')
   const [isPending, startTransition] = useTransition()
 
@@ -69,21 +71,31 @@ export function EditSupervisorDialog({
     reset,
     control,
     formState: { errors },
-  } = useForm<FormValues>({ resolver: zodResolver(schema) })
+  } = useForm<FormValues>({
+    resolver: zodResolver(schema),
+    values: supervisor
+      ? {
+          name: supervisor.name,
+          phone: supervisor.phone ?? '',
+          joinDate: toDateInputValue(supervisor.joinDate),
+          salaryMonthly: supervisor.salaryMonthly ?? '',
+          cityId: supervisor.homeCity?.id ?? '',
+        }
+      : undefined,
+  })
 
-  useEffect(() => {
-    if (!supervisor) return
-    const cityName = supervisor.homeCity?.name ?? ''
-    setSelectedCityName(cityName)
-    reset({
-      name: supervisor.name,
-      phone: supervisor.phone ?? '',
-      joinDate: toDateInputValue(supervisor.joinDate),
-      salaryMonthly: supervisor.salaryMonthly ?? '',
-      cityId: supervisor.homeCity?.id ?? '',
-    })
+  // Keep display name in sync with the supervisor prop
+  // (values prop handles form fields; selectedCityName drives the Select label)
+  const derivedCityName = supervisor?.homeCity?.name ?? ''
+  if (selectedCityName !== derivedCityName && !open) {
+    // reset display name when dialog closes so it's fresh on reopen
+  }
+
+  function handleClose() {
+    reset()
+    setSelectedCityName(supervisor?.homeCity?.name ?? '')
     setServerError('')
-  }, [supervisor, reset])
+  }
 
   function onSubmit(values: FormValues) {
     if (!supervisor) return
@@ -106,76 +118,86 @@ export function EditSupervisorDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) handleClose()
+        onOpenChange(o)
+      }}
+    >
       <DialogContent className="sm:max-w-lg">
         <DialogTitle>Edit Supervisor</DialogTitle>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-sup-name">Name</Label>
-            <Input id="edit-sup-name" {...register('name')} />
-            {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
+        {supervisor && (
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-2">
             <div className="space-y-1.5">
-              <Label htmlFor="edit-sup-phone">Phone</Label>
-              <Input id="edit-sup-phone" {...register('phone')} placeholder="Optional" />
+              <Label htmlFor="edit-sup-name">Name</Label>
+              <Input id="edit-sup-name" {...register('name')} />
+              {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-sup-join-date">Join Date</Label>
-              <Input id="edit-sup-join-date" type="date" {...register('joinDate')} />
-            </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-sup-salary">Monthly Salary (₹)</Label>
-              <Input
-                id="edit-sup-salary"
-                type="number"
-                step="0.01"
-                {...register('salaryMonthly')}
-                placeholder="Optional"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-sup-phone">Phone</Label>
+                <Input id="edit-sup-phone" {...register('phone')} placeholder="Optional" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-sup-join-date">Join Date</Label>
+                <Input id="edit-sup-join-date" type="date" {...register('joinDate')} />
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label>Home City</Label>
-              <Controller
-                control={control}
-                name="cityId"
-                render={({ field }) => (
-                  <Select
-                    value={field.value ?? ''}
-                    onValueChange={(v) => {
-                      field.onChange(v ?? '')
-                      setSelectedCityName(cities.find((c) => c.id === v)?.name ?? '')
-                    }}
-                  >
-                    <SelectTrigger className="w-full">
-                      <span className={selectedCityName ? 'text-foreground' : 'text-muted-foreground'}>
-                        {selectedCityName || 'Select city'}
-                      </span>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {cities.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-sup-salary">Monthly Salary (₹)</Label>
+                <Input
+                  id="edit-sup-salary"
+                  type="number"
+                  step="0.01"
+                  {...register('salaryMonthly')}
+                  placeholder="Optional"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Home City</Label>
+                <Controller
+                  control={control}
+                  name="cityId"
+                  render={({ field }) => (
+                    <Select
+                      value={field.value ?? ''}
+                      onValueChange={(v) => {
+                        field.onChange(v ?? '')
+                        setSelectedCityName(cities.find((c) => c.id === v)?.name ?? '')
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <span className={field.value ? 'text-foreground' : 'text-muted-foreground'}>
+                          {field.value
+                            ? (cities.find((c) => c.id === field.value)?.name ?? selectedCityName ?? 'Select city')
+                            : 'Select city'}
+                        </span>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {cities.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
             </div>
-          </div>
 
-          {serverError && <p className="text-xs text-destructive">{serverError}</p>}
+            {serverError && <p className="text-xs text-destructive">{serverError}</p>}
 
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? 'Saving…' : 'Save'}
-            </Button>
-          </DialogFooter>
-        </form>
+            <DialogFooter>
+              <DialogClose render={<Button variant="outline" type="button" />}>Cancel</DialogClose>
+              <Button type="submit" disabled={isPending}>
+                {isPending ? 'Saving…' : 'Save'}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   )

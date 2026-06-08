@@ -28,7 +28,9 @@ type Worker = {
   name: string
   category: 'skilled' | 'semi_skilled' | 'helper'
   wageDaily: string
-  otRate: string | null
+  otRate2hr: string | null
+  otRate4hr: string | null
+  otRate6hr: string | null
   aadhaarDisplay: string | null
   aadhaarLastFour: string | null
   status: 'pending' | 'active' | 'rejected'
@@ -37,8 +39,6 @@ type Worker = {
   cityId: string
   age: number | null
   phone: string | null
-  address: string | null
-  joinDate: Date | null
   emergencyContact: string | null
   city: { id: string; name: string }
   createdAt: Date
@@ -51,6 +51,13 @@ const CATEGORY_LABELS: Record<string, string> = {
 }
 
 const col = createColumnHelper<Worker>()
+
+function otSummary(w: Worker) {
+  const parts = [w.otRate2hr, w.otRate4hr, w.otRate6hr]
+    .map((v, i) => v ? `${['2','4','6'][i]}h:₹${Number(v).toLocaleString('en-IN')}` : null)
+    .filter(Boolean)
+  return parts.length ? parts.join(' / ') : null
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function WorkerTable({ data, extraColumns }: { data: Worker[]; extraColumns?: ColumnDef<Worker, any>[] }) {
@@ -71,12 +78,14 @@ function WorkerTable({ data, extraColumns }: { data: Worker[]; extraColumns?: Co
         header: 'Daily Wage',
         cell: (info) => `₹${Number(info.getValue()).toLocaleString('en-IN')}`,
       }),
-      col.accessor('otRate', {
-        header: 'OT Rate',
-        cell: (info) => {
-          const v = info.getValue()
-          if (!v) return <span className="text-muted-foreground">—</span>
-          return `₹${Number(v).toLocaleString('en-IN')}`
+      col.display({
+        id: 'otRates',
+        header: 'OT Rates',
+        cell: ({ row }) => {
+          const summary = otSummary(row.original)
+          return summary
+            ? <span className="text-sm text-muted-foreground">{summary}</span>
+            : <span className="text-muted-foreground">—</span>
         },
       }),
       col.accessor('aadhaarDisplay', {
@@ -91,11 +100,7 @@ function WorkerTable({ data, extraColumns }: { data: Worker[]; extraColumns?: Co
     [extraColumns]
   )
 
-  const table = useReactTable({
-    data,
-    columns: baseColumns,
-    getCoreRowModel: getCoreRowModel(),
-  })
+  const table = useReactTable({ data, columns: baseColumns, getCoreRowModel: getCoreRowModel() })
 
   return (
     <div className="rounded-lg border overflow-hidden">
@@ -104,9 +109,7 @@ function WorkerTable({ data, extraColumns }: { data: Worker[]; extraColumns?: Co
           {table.getHeaderGroups().map((hg) => (
             <TableRow key={hg.id}>
               {hg.headers.map((h) => (
-                <TableHead key={h.id}>
-                  {flexRender(h.column.columnDef.header, h.getContext())}
-                </TableHead>
+                <TableHead key={h.id}>{flexRender(h.column.columnDef.header, h.getContext())}</TableHead>
               ))}
             </TableRow>
           ))}
@@ -114,10 +117,7 @@ function WorkerTable({ data, extraColumns }: { data: Worker[]; extraColumns?: Co
         <TableBody>
           {table.getRowModel().rows.length === 0 ? (
             <TableRow>
-              <TableCell
-                colSpan={baseColumns.length}
-                className="h-24 text-center text-muted-foreground"
-              >
+              <TableCell colSpan={baseColumns.length} className="h-24 text-center text-muted-foreground">
                 No workers found.
               </TableCell>
             </TableRow>
@@ -125,9 +125,7 @@ function WorkerTable({ data, extraColumns }: { data: Worker[]; extraColumns?: Co
             table.getRowModel().rows.map((row) => (
               <TableRow key={row.id}>
                 {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
+                  <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
                 ))}
               </TableRow>
             ))
@@ -191,11 +189,7 @@ export function WorkersList({
   )
 
   const currentData =
-    activeTab === 'active'
-      ? activeWorkers
-      : activeTab === 'pending'
-        ? pendingWorkers
-        : rejectedWorkers
+    activeTab === 'active' ? activeWorkers : activeTab === 'pending' ? pendingWorkers : rejectedWorkers
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const currentExtraColumns: ColumnDef<Worker, any>[] | undefined =

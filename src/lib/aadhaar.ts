@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto'
 import { env } from '@/env'
+export { validateAadhaar, maskAadhaar } from './aadhaar-validate'
 
 const ALGORITHM = 'aes-256-gcm'
 const KEY = Buffer.from(env.AADHAAR_ENCRYPTION_KEY, 'hex')
@@ -20,10 +21,6 @@ export function decryptAadhaar(encrypted: string): string {
   const decipher = createDecipheriv(ALGORITHM, KEY, iv)
   decipher.setAuthTag(authTag)
   return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8')
-}
-
-export function maskAadhaar(lastFour: string): string {
-  return `XXXX-XXXX-${lastFour}`
 }
 
 export function extractLastFour(aadhaar: string): string {

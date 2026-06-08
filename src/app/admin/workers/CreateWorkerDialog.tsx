@@ -24,29 +24,37 @@ import {
   SelectTrigger,
 } from '@/components/ui/select'
 import { createWorkerAsAdmin } from '@/actions/workers'
+import { validateAadhaar } from '@/lib/aadhaar-validate'
 
 type City = { id: string; name: string }
-
-const schema = z.object({
-  cityId: z.string().uuid('City is required'),
-  name: z.string().min(1, 'Name is required').max(200),
-  age: z.string().optional(),
-  phone: z.string().max(15).optional(),
-  address: z.string().max(500).optional(),
-  joinDate: z.string().optional(),
-  emergencyContact: z.string().max(200).optional(),
-  category: z.enum(['skilled', 'semi_skilled', 'helper']),
-  wageDaily: z.string().min(1, 'Daily wage is required'),
-  otRate: z.string().optional(),
-  aadhaar: z.string().optional(),
-})
-type FormValues = z.infer<typeof schema>
 
 const CATEGORIES = [
   { value: 'skilled', label: 'Skilled' },
   { value: 'semi_skilled', label: 'Semi-Skilled' },
   { value: 'helper', label: 'Helper' },
 ] as const
+
+const schema = z.object({
+  cityId: z.string().uuid('City is required'),
+  name: z.string().min(1, 'Name is required').max(200),
+  age: z.string().min(1, 'Age is required').refine(
+    (v) => { const n = parseInt(v, 10); return n >= 18 && n <= 45 },
+    'Age must be between 18 and 45'
+  ),
+  phone: z.string().max(15).optional(),
+  emergencyContact: z.string().max(200).optional(),
+  category: z.enum(['skilled', 'semi_skilled', 'helper']),
+  wageDaily: z.string().min(1, 'Daily wage is required'),
+  otRate2hr: z.string().optional(),
+  otRate4hr: z.string().optional(),
+  otRate6hr: z.string().optional(),
+  aadhaar: z.string()
+    .min(1, 'Aadhaar is required')
+    .length(12, 'Must be exactly 12 digits')
+    .regex(/^\d{12}$/, 'Only digits allowed')
+    .refine(validateAadhaar, 'Aadhaar number failed checksum validation'),
+})
+type FormValues = z.infer<typeof schema>
 
 export function CreateWorkerDialog({ cities }: { cities: City[] }) {
   const router = useRouter()
@@ -56,13 +64,9 @@ export function CreateWorkerDialog({ cities }: { cities: City[] }) {
   const [serverError, setServerError] = useState('')
   const [isPending, startTransition] = useTransition()
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    control,
-    formState: { errors },
-  } = useForm<FormValues>({ resolver: zodResolver(schema) })
+  const { register, handleSubmit, reset, control, formState: { errors } } = useForm<FormValues>({
+    resolver: zodResolver(schema),
+  })
 
   function handleClose() {
     reset()
@@ -72,25 +76,21 @@ export function CreateWorkerDialog({ cities }: { cities: City[] }) {
   }
 
   function onSubmit(values: FormValues) {
-    if (values.aadhaar && !/^\d{12}$/.test(values.aadhaar)) {
-      setServerError('Aadhaar must be exactly 12 digits')
-      return
-    }
     setServerError('')
     startTransition(async () => {
       try {
         await createWorkerAsAdmin({
           cityId: values.cityId,
           name: values.name,
-          age: values.age ? parseInt(values.age, 10) : undefined,
+          age: parseInt(values.age, 10),
           phone: values.phone || undefined,
-          address: values.address || undefined,
-          joinDate: values.joinDate || undefined,
           emergencyContact: values.emergencyContact || undefined,
           category: values.category,
           wageDaily: values.wageDaily,
-          otRate: values.otRate || undefined,
-          aadhaar: values.aadhaar || undefined,
+          otRate2hr: values.otRate2hr || undefined,
+          otRate4hr: values.otRate4hr || undefined,
+          otRate6hr: values.otRate6hr || undefined,
+          aadhaar: values.aadhaar,
         })
         handleClose()
         setOpen(false)
@@ -102,13 +102,7 @@ export function CreateWorkerDialog({ cities }: { cities: City[] }) {
   }
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => {
-        if (!o) handleClose()
-        setOpen(o)
-      }}
-    >
+    <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); setOpen(o) }}>
       <DialogTrigger render={<Button><Plus className="size-4" />Add Worker</Button>} />
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogTitle>Add Worker</DialogTitle>
@@ -151,7 +145,8 @@ export function CreateWorkerDialog({ cities }: { cities: City[] }) {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="w-age">Age</Label>
-              <Input id="w-age" type="number" min={18} max={80} {...register('age')} placeholder="Optional" />
+              <Input id="w-age" type="number" min={18} max={45} {...register('age')} placeholder="18–45" />
+              {errors.age && <p className="text-xs text-destructive">{errors.age.message}</p>}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="w-phone">Phone</Label>
@@ -160,19 +155,8 @@ export function CreateWorkerDialog({ cities }: { cities: City[] }) {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="w-address">Address</Label>
-            <Input id="w-address" {...register('address')} placeholder="Optional" />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="w-join-date">Join Date</Label>
-              <Input id="w-join-date" type="date" {...register('joinDate')} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="w-emergency">Emergency Contact</Label>
-              <Input id="w-emergency" {...register('emergencyContact')} placeholder="Optional" />
-            </div>
+            <Label htmlFor="w-emergency">Emergency Contact</Label>
+            <Input id="w-emergency" {...register('emergencyContact')} placeholder="Optional" />
           </div>
 
           <div className="space-y-1.5">
@@ -204,15 +188,24 @@ export function CreateWorkerDialog({ cities }: { cities: City[] }) {
             {errors.category && <p className="text-xs text-destructive">{errors.category.message}</p>}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="w-wage">Daily Wage (₹)</Label>
+            <Input id="w-wage" type="number" step="0.01" min={0} {...register('wageDaily')} placeholder="0.00" />
+            {errors.wageDaily && <p className="text-xs text-destructive">{errors.wageDaily.message}</p>}
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="w-wage">Daily Wage (₹)</Label>
-              <Input id="w-wage" type="number" step="0.01" min={0} {...register('wageDaily')} placeholder="0.00" />
-              {errors.wageDaily && <p className="text-xs text-destructive">{errors.wageDaily.message}</p>}
+              <Label htmlFor="w-ot2">OT 2hr (₹)</Label>
+              <Input id="w-ot2" type="number" step="0.01" min={0} placeholder="Optional" {...register('otRate2hr')} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="w-ot">OT Rate (₹)</Label>
-              <Input id="w-ot" type="number" step="0.01" min={0} {...register('otRate')} placeholder="Optional" />
+              <Label htmlFor="w-ot4">OT 4hr (₹)</Label>
+              <Input id="w-ot4" type="number" step="0.01" min={0} placeholder="Optional" {...register('otRate4hr')} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="w-ot6">OT 6hr (₹)</Label>
+              <Input id="w-ot6" type="number" step="0.01" min={0} placeholder="Optional" {...register('otRate6hr')} />
             </div>
           </div>
 
@@ -224,9 +217,10 @@ export function CreateWorkerDialog({ cities }: { cities: City[] }) {
               inputMode="numeric"
               maxLength={12}
               {...register('aadhaar')}
-              placeholder="12-digit number (optional)"
+              placeholder="12-digit number"
             />
-            <p className="text-xs text-muted-foreground">Enter all 12 digits, no spaces or dashes.</p>
+            <p className="text-xs text-muted-foreground">Required. Enter all 12 digits, no spaces or dashes.</p>
+            {errors.aadhaar && <p className="text-xs text-destructive">{errors.aadhaar.message}</p>}
           </div>
 
           {serverError && <p className="text-xs text-destructive">{serverError}</p>}

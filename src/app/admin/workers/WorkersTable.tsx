@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   useReactTable,
   getCoreRowModel,
-  getFilteredRowModel,
   flexRender,
   createColumnHelper,
 } from '@tanstack/react-table'
@@ -24,11 +24,19 @@ import {
   SelectItem,
   SelectTrigger,
 } from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogClose,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import { CreateWorkerDialog } from './CreateWorkerDialog'
 import { ApproveWorkerDialog } from './ApproveWorkerDialog'
 import { RejectWorkerDialog } from './RejectWorkerDialog'
-import { ReassignCityDialog } from './ReassignCityDialog'
-import { AadhaarRevealButton } from './AadhaarRevealButton'
+import { WorkerDetailDialog } from './WorkerDetailDialog'
+import { EditWorkerDialog } from './EditWorkerDialog'
+import { deleteWorker } from '@/actions/workers'
 
 type City = { id: string; name: string }
 type Worker = {
@@ -36,13 +44,20 @@ type Worker = {
   name: string
   category: 'skilled' | 'semi_skilled' | 'helper'
   wageDaily: string
-  otRate: string | null
+  otRate2hr: string | null
+  otRate4hr: string | null
+  otRate6hr: string | null
   aadhaarLastFour: string | null
   aadhaarDisplay: string | null
   status: 'pending' | 'active' | 'rejected'
   rejectionReason: string | null
   resubmitted: boolean
   cityId: string
+  age: number | null
+  phone: string | null
+  address: string | null
+  joinDate: Date | null
+  emergencyContact: string | null
   city: { id: string; name: string }
   submittedByEmployee: { id: string; name: string } | null
   submittedBy: string | null
@@ -63,13 +78,9 @@ function StatusBadge({ status }: { status: Worker['status'] }) {
   return <Badge variant="destructive">Rejected</Badge>
 }
 
-export function WorkersTable({
-  workers,
-  cities,
-}: {
-  workers: Worker[]
-  cities: City[]
-}) {
+export function WorkersTable({ workers, cities }: { workers: Worker[]; cities: City[] }) {
+  const router = useRouter()
+
   const [statusFilter, setStatusFilter] = useState('pending')
   const [statusFilterName, setStatusFilterName] = useState('Pending')
   const [cityFilter, setCityFilter] = useState('all')
@@ -77,20 +88,29 @@ export function WorkersTable({
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [categoryFilterName, setCategoryFilterName] = useState('All Categories')
 
+  const [detailTarget, setDetailTarget] = useState<Worker | null>(null)
   const [approveTarget, setApproveTarget] = useState<Worker | null>(null)
   const [rejectTarget, setRejectTarget] = useState<Worker | null>(null)
-  const [reassignTarget, setReassignTarget] = useState<Worker | null>(null)
+  const [editTarget, setEditTarget] = useState<Worker | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Worker | null>(null)
+  const [deleteError, setDeleteError] = useState('')
+  const [isDeleting, startDelete] = useTransition()
 
   const pendingCount = useMemo(() => workers.filter((w) => w.status === 'pending').length, [workers])
 
-  const filtered = useMemo(() => {
-    return workers.filter((w) => {
-      if (statusFilter !== 'all' && w.status !== statusFilter) return false
-      if (cityFilter !== 'all' && w.city.id !== cityFilter) return false
-      if (categoryFilter !== 'all' && w.category !== categoryFilter) return false
-      return true
-    })
-  }, [workers, statusFilter, cityFilter, categoryFilter])
+  const filtered = useMemo(() => workers.filter((w) => {
+    if (statusFilter !== 'all' && w.status !== statusFilter) return false
+    if (cityFilter !== 'all' && w.city.id !== cityFilter) return false
+    if (categoryFilter !== 'all' && w.category !== categoryFilter) return false
+    return true
+  }), [workers, statusFilter, cityFilter, categoryFilter])
+
+  const uniqueCities = useMemo(() => {
+    const seen = new Set<string>()
+    return workers
+      .map((w) => ({ id: w.city.id, name: w.city.name }))
+      .filter((c) => { if (seen.has(c.id)) return false; seen.add(c.id); return true })
+  }, [workers])
 
   const columns = useMemo(
     () => [
@@ -109,71 +129,32 @@ export function WorkersTable({
         header: 'Daily Wage',
         cell: (info) => `₹${Number(info.getValue()).toLocaleString('en-IN')}`,
       }),
-      col.accessor('otRate', {
-        header: 'OT Rate',
-        cell: (info) => {
-          const v = info.getValue()
-          if (!v) return <span className="text-muted-foreground">—</span>
-          return `₹${Number(v).toLocaleString('en-IN')}`
-        },
-      }),
-      col.display({
-        id: 'aadhaar',
-        header: 'Aadhaar',
-        cell: ({ row }) => (
-          <AadhaarRevealButton
-            workerId={row.original.id}
-            maskedDisplay={row.original.aadhaarDisplay}
-          />
-        ),
-      }),
       col.accessor('status', {
         header: 'Status',
         cell: (info) => <StatusBadge status={info.getValue()} />,
-      }),
-      col.display({
-        id: 'submittedBy',
-        header: 'Submitted By',
-        cell: ({ row }) => {
-          const emp = row.original.submittedByEmployee
-          if (!emp) return <span className="text-muted-foreground text-sm">Admin</span>
-          return <span className="text-sm">{emp.name}</span>
-        },
-      }),
-      col.display({
-        id: 'rejectionReason',
-        header: 'Rejection Reason',
-        cell: ({ row }) => {
-          const reason = row.original.rejectionReason
-          if (!reason) return <span className="text-muted-foreground">—</span>
-          return <span className="text-sm text-destructive max-w-xs truncate block">{reason}</span>
-        },
       }),
       col.display({
         id: 'actions',
         header: 'Actions',
         cell: ({ row }) => {
           const w = row.original
-          if (w.status === 'pending') {
-            return (
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => setApproveTarget(w)}>
-                  Approve
-                </Button>
-                <Button variant="destructive" size="sm" onClick={() => setRejectTarget(w)}>
-                  Reject
-                </Button>
-              </div>
-            )
-          }
-          if (w.status === 'active') {
-            return (
-              <Button variant="outline" size="sm" onClick={() => setReassignTarget(w)}>
-                Reassign City
+          return (
+            <div className="flex items-center gap-1.5">
+              <Button variant="outline" size="sm" onClick={() => setDetailTarget(w)}>
+                View
               </Button>
-            )
-          }
-          return <span className="text-muted-foreground text-sm">—</span>
+              {w.status === 'pending' && (
+                <>
+                  <Button variant="outline" size="sm" onClick={() => setApproveTarget(w)}>
+                    Approve
+                  </Button>
+                  <Button variant="destructive" size="sm" onClick={() => setRejectTarget(w)}>
+                    Reject
+                  </Button>
+                </>
+              )}
+            </div>
+          )
         },
       }),
     ],
@@ -184,19 +165,21 @@ export function WorkersTable({
     data: filtered,
     columns,
     getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
   })
 
-  const uniqueCities = useMemo(() => {
-    const seen = new Set<string>()
-    return workers
-      .map((w) => ({ id: w.city.id, name: w.city.name }))
-      .filter((c) => {
-        if (seen.has(c.id)) return false
-        seen.add(c.id)
-        return true
-      })
-  }, [workers])
+  function handleDeleteConfirm() {
+    if (!deleteTarget) return
+    setDeleteError('')
+    startDelete(async () => {
+      try {
+        await deleteWorker(deleteTarget.id)
+        setDeleteTarget(null)
+        router.refresh()
+      } catch (e) {
+        setDeleteError(e instanceof Error ? e.message : 'Something went wrong')
+      }
+    })
+  }
 
   return (
     <div className="space-y-4">
@@ -204,7 +187,7 @@ export function WorkersTable({
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-semibold">Workers</h1>
           {pendingCount > 0 && (
-            <Badge variant="destructive">{pendingCount} Pending Approval{pendingCount !== 1 ? 's' : ''}</Badge>
+            <Badge variant="destructive">{pendingCount} Pending</Badge>
           )}
         </div>
         <CreateWorkerDialog cities={cities} />
@@ -280,9 +263,7 @@ export function WorkersTable({
             {table.getHeaderGroups().map((hg) => (
               <TableRow key={hg.id}>
                 {hg.headers.map((h) => (
-                  <TableHead key={h.id}>
-                    {flexRender(h.column.columnDef.header, h.getContext())}
-                  </TableHead>
+                  <TableHead key={h.id}>{flexRender(h.column.columnDef.header, h.getContext())}</TableHead>
                 ))}
               </TableRow>
             ))}
@@ -298,9 +279,7 @@ export function WorkersTable({
               table.getRowModel().rows.map((row) => (
                 <TableRow key={row.id}>
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
+                    <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
                   ))}
                 </TableRow>
               ))
@@ -309,6 +288,15 @@ export function WorkersTable({
         </Table>
       </div>
 
+      <WorkerDetailDialog
+        worker={detailTarget}
+        open={!!detailTarget}
+        onOpenChange={(o) => { if (!o) setDetailTarget(null) }}
+        onApprove={(w) => setApproveTarget(w)}
+        onReject={(w) => setRejectTarget(w)}
+        onEdit={(w) => setEditTarget(w)}
+        onDelete={(w) => setDeleteTarget(w)}
+      />
       <ApproveWorkerDialog
         worker={approveTarget}
         open={!!approveTarget}
@@ -319,12 +307,29 @@ export function WorkersTable({
         open={!!rejectTarget}
         onOpenChange={(o) => { if (!o) setRejectTarget(null) }}
       />
-      <ReassignCityDialog
-        worker={reassignTarget}
+      <EditWorkerDialog
+        worker={editTarget}
         cities={cities}
-        open={!!reassignTarget}
-        onOpenChange={(o) => { if (!o) setReassignTarget(null) }}
+        open={!!editTarget}
+        onOpenChange={(o) => { if (!o) setEditTarget(null) }}
       />
+
+      {/* Delete confirm */}
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) { setDeleteTarget(null); setDeleteError('') } }}>
+        <DialogContent>
+          <DialogTitle>Delete Worker</DialogTitle>
+          <p className="text-sm text-muted-foreground mt-1">
+            Permanently delete <span className="font-medium text-foreground">{deleteTarget?.name}</span>? This cannot be undone.
+          </p>
+          {deleteError && <p className="text-xs text-destructive mt-2">{deleteError}</p>}
+          <DialogFooter className="mt-4">
+            <DialogClose render={<Button variant="outline" type="button" disabled={isDeleting} />}>Cancel</DialogClose>
+            <Button variant="destructive" onClick={handleDeleteConfirm} disabled={isDeleting}>
+              {isDeleting ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

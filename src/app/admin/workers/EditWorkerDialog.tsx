@@ -21,7 +21,7 @@ import {
   SelectItem,
   SelectTrigger,
 } from '@/components/ui/select'
-import { resubmitWorker } from '@/actions/workers'
+import { updateWorker } from '@/actions/workers'
 import { validateAadhaar } from '@/lib/aadhaar-validate'
 
 type City = { id: string; name: string }
@@ -70,20 +70,20 @@ const schema = z.object({
 })
 type FormValues = z.infer<typeof schema>
 
-export function ResubmitWorkerDialog({
+export function EditWorkerDialog({
   worker,
-  assignedCities,
+  cities,
   open,
   onOpenChange,
 }: {
   worker: Worker | null
-  assignedCities: City[]
+  cities: City[]
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
   const router = useRouter()
   const [selectedCityName, setSelectedCityName] = useState(
-    worker ? (assignedCities.find((c) => c.id === worker.cityId)?.name ?? '') : ''
+    worker ? (cities.find((c) => c.id === worker.cityId)?.name ?? '') : ''
   )
   const [selectedCategoryLabel, setSelectedCategoryLabel] = useState(
     worker ? (CATEGORY_LABELS[worker.category] ?? '') : ''
@@ -113,8 +113,10 @@ export function ResubmitWorkerDialog({
   function handleClose() {
     reset()
     setServerError('')
-    setSelectedCityName(worker ? (assignedCities.find((c) => c.id === worker.cityId)?.name ?? '') : '')
-    setSelectedCategoryLabel(worker ? (CATEGORY_LABELS[worker.category] ?? '') : '')
+    if (worker) {
+      setSelectedCityName(cities.find((c) => c.id === worker.cityId)?.name ?? '')
+      setSelectedCategoryLabel(CATEGORY_LABELS[worker.category] ?? '')
+    }
   }
 
   function onSubmit(values: FormValues) {
@@ -122,7 +124,7 @@ export function ResubmitWorkerDialog({
     setServerError('')
     startTransition(async () => {
       try {
-        await resubmitWorker(worker.id, {
+        await updateWorker(worker.id, {
           cityId: values.cityId,
           name: values.name,
           age: parseInt(values.age, 10),
@@ -150,7 +152,7 @@ export function ResubmitWorkerDialog({
       onOpenChange={(o) => { if (!o) handleClose(); onOpenChange(o) }}
     >
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogTitle>Resubmit Worker</DialogTitle>
+        <DialogTitle>Edit Worker</DialogTitle>
         {worker && (
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-2">
             <div className="space-y-1.5">
@@ -163,7 +165,7 @@ export function ResubmitWorkerDialog({
                     value={field.value ?? ''}
                     onValueChange={(v) => {
                       field.onChange(v ?? '')
-                      setSelectedCityName(assignedCities.find((c) => c.id === v)?.name ?? '')
+                      setSelectedCityName(cities.find((c) => c.id === v)?.name ?? '')
                     }}
                   >
                     <SelectTrigger className="w-full">
@@ -172,7 +174,7 @@ export function ResubmitWorkerDialog({
                       </span>
                     </SelectTrigger>
                     <SelectContent>
-                      {assignedCities.map((c) => (
+                      {cities.map((c) => (
                         <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -183,26 +185,26 @@ export function ResubmitWorkerDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="rs-name">Name</Label>
-              <Input id="rs-name" {...register('name')} />
+              <Label htmlFor="ew-name">Name</Label>
+              <Input id="ew-name" {...register('name')} />
               {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="rs-age">Age</Label>
-                <Input id="rs-age" type="number" min={18} max={45} {...register('age')} />
+                <Label htmlFor="ew-age">Age</Label>
+                <Input id="ew-age" type="number" min={18} max={45} {...register('age')} />
                 {errors.age && <p className="text-xs text-destructive">{errors.age.message}</p>}
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="rs-phone">Phone</Label>
-                <Input id="rs-phone" {...register('phone')} placeholder="Optional" />
+                <Label htmlFor="ew-phone">Phone</Label>
+                <Input id="ew-phone" {...register('phone')} placeholder="Optional" />
               </div>
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="rs-emergency">Emergency Contact</Label>
-              <Input id="rs-emergency" {...register('emergencyContact')} placeholder="Optional" />
+              <Label htmlFor="ew-emergency">Emergency Contact</Label>
+              <Input id="ew-emergency" {...register('emergencyContact')} placeholder="Optional" />
             </div>
 
             <div className="space-y-1.5">
@@ -235,50 +237,46 @@ export function ResubmitWorkerDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="rs-wage">Daily Wage (₹)</Label>
-              <Input id="rs-wage" type="number" step="0.01" min={0} {...register('wageDaily')} />
+              <Label htmlFor="ew-wage">Daily Wage (₹)</Label>
+              <Input id="ew-wage" type="number" step="0.01" min={0} {...register('wageDaily')} />
               {errors.wageDaily && <p className="text-xs text-destructive">{errors.wageDaily.message}</p>}
             </div>
 
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="rs-ot2">OT 2hr (₹)</Label>
-                <Input id="rs-ot2" type="number" step="0.01" min={0} placeholder="Optional" {...register('otRate2hr')} />
+                <Label htmlFor="ew-ot2">OT 2hr (₹)</Label>
+                <Input id="ew-ot2" type="number" step="0.01" min={0} placeholder="Optional" {...register('otRate2hr')} />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="rs-ot4">OT 4hr (₹)</Label>
-                <Input id="rs-ot4" type="number" step="0.01" min={0} placeholder="Optional" {...register('otRate4hr')} />
+                <Label htmlFor="ew-ot4">OT 4hr (₹)</Label>
+                <Input id="ew-ot4" type="number" step="0.01" min={0} placeholder="Optional" {...register('otRate4hr')} />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="rs-ot6">OT 6hr (₹)</Label>
-                <Input id="rs-ot6" type="number" step="0.01" min={0} placeholder="Optional" {...register('otRate6hr')} />
+                <Label htmlFor="ew-ot6">OT 6hr (₹)</Label>
+                <Input id="ew-ot6" type="number" step="0.01" min={0} placeholder="Optional" {...register('otRate6hr')} />
               </div>
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="rs-aadhaar">Aadhaar Number</Label>
+              <Label htmlFor="ew-aadhaar">Aadhaar Number</Label>
               <Input
-                id="rs-aadhaar"
+                id="ew-aadhaar"
                 type="text"
                 inputMode="numeric"
                 maxLength={12}
                 {...register('aadhaar')}
                 placeholder="Leave blank to keep existing"
               />
-              <p className="text-xs text-muted-foreground">
-                Only enter a new 12-digit number to update; leave blank to keep existing.
-              </p>
+              <p className="text-xs text-muted-foreground">Only enter a new 12-digit number to update.</p>
               {errors.aadhaar && <p className="text-xs text-destructive">{errors.aadhaar.message}</p>}
             </div>
 
             {serverError && <p className="text-xs text-destructive">{serverError}</p>}
 
             <DialogFooter>
-              <DialogClose render={<Button variant="outline" type="button" disabled={isPending} />}>
-                Cancel
-              </DialogClose>
+              <DialogClose render={<Button variant="outline" type="button" disabled={isPending} />}>Cancel</DialogClose>
               <Button type="submit" disabled={isPending}>
-                {isPending ? 'Resubmitting…' : 'Resubmit for Approval'}
+                {isPending ? 'Saving…' : 'Save Changes'}
               </Button>
             </DialogFooter>
           </form>
