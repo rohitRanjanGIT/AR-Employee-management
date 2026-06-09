@@ -1,36 +1,26 @@
 'use client'
 
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { cn } from '@/lib/utils'
+import {
+  BriefcaseBusiness,
+  Building2,
+  CalendarDays,
+  Gauge,
+  HardHat,
+  MapPinned,
+  UserRoundCog,
+} from 'lucide-react'
+import { AppSidebar } from '@/components/AppSidebar'
 
 const navItems = [
-  { label: 'Dashboard', href: '/admin/dashboard' },
-  { label: 'Cities', href: '/admin/cities' },
-  { label: 'Sites', href: '/admin/sites' },
-  { label: 'Supervisors', href: '/admin/supervisors' },
-  { label: 'Workers', href: '/admin/workers' },
-  { label: 'Work Types', href: '/admin/work-types' },
+  { label: 'Dashboard', href: '/admin/dashboard', icon: Gauge },
+  { label: 'Cities', href: '/admin/cities', icon: MapPinned },
+  { label: 'Sites', href: '/admin/sites', icon: Building2 },
+  { label: 'Supervisors', href: '/admin/supervisors', icon: UserRoundCog },
+  { label: 'Workers', href: '/admin/workers', icon: HardHat },
+  { label: 'Attendance', href: '/admin/attendance', icon: CalendarDays },
+  { label: 'Work Types', href: '/admin/work-types', icon: BriefcaseBusiness },
 ]
 
 export function AdminNav() {
-  const pathname = usePathname()
-  return (
-    <nav className="flex gap-1 px-6 border-b bg-muted/30">
-      {navItems.map((item) => (
-        <Link
-          key={item.href}
-          href={item.href}
-          className={cn(
-            'px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
-            pathname.startsWith(item.href)
-              ? 'border-primary text-foreground'
-              : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-          )}
-        >
-          {item.label}
-        </Link>
-      ))}
-    </nav>
-  )
+  return <AppSidebar title="Admin Modules" subtitle="Manage EMS operations" items={navItems} />
 }

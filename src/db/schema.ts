@@ -8,6 +8,8 @@ import {
   uuid,
   jsonb,
   pgEnum,
+  date,
+  unique,
 } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 
@@ -17,6 +19,9 @@ export const roleEnum = pgEnum('role', ['admin', 'supervisor', 'accounts', 'sale
 export const workerStatusEnum = pgEnum('worker_status', ['pending', 'active', 'rejected'])
 export const workerCategoryEnum = pgEnum('worker_category', ['skilled', 'semi_skilled', 'helper'])
 export const siteStatusEnum = pgEnum('site_status', ['active', 'inactive'])
+export const otEnum = pgEnum('ot_type', ['none', '2hr', '4hr'])
+export const attendanceStatusEnum = pgEnum('attendance_status', ['full', 'half', 'absent'])
+export const editRequestStatusEnum = pgEnum('edit_request_status', ['pending', 'approved', 'rejected'])
 
 // ─── better-auth tables ───────────────────────────────────────────────────────
 
@@ -208,6 +213,50 @@ export const siteSnapshots = pgTable('site_snapshots', {
   expenses: jsonb('expenses'),
 })
 
+// ─── Attendance ───────────────────────────────────────────────────────────────
+
+export const attendance = pgTable(
+  'attendance',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    siteId: uuid('site_id')
+      .notNull()
+      .references(() => sites.id),
+    workerId: uuid('worker_id')
+      .notNull()
+      .references(() => workers.id),
+    cityId: uuid('city_id')
+      .notNull()
+      .references(() => cities.id),
+    date: date('date').notNull(),
+
+    morningMarkedAt: timestamp('morning_marked_at'),
+    morningMarkedBy: uuid('morning_marked_by').references(() => employees.id),
+
+    eveningMarkedAt: timestamp('evening_marked_at'),
+    eveningMarkedBy: uuid('evening_marked_by').references(() => employees.id),
+
+    ot: otEnum('ot').notNull().default('none'),
+
+    wageDailySnapshot: decimal('wage_daily_snapshot', { precision: 10, scale: 2 }).notNull(),
+    otRateSnapshot: decimal('ot_rate_snapshot', { precision: 10, scale: 2 }),
+
+    derivedStatus: attendanceStatusEnum('derived_status').notNull().default('half'),
+
+    isEdited: boolean('is_edited').notNull().default(false),
+    editRequest: jsonb('edit_request'),
+    editRequestStatus: editRequestStatusEnum('edit_request_status'),
+
+    isLocked: boolean('is_locked').notNull().default(false),
+
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => ({
+    workerSiteDateUnique: unique().on(table.workerId, table.siteId, table.date),
+  })
+)
+
 // ─── Relations ────────────────────────────────────────────────────────────────
 
 export const statesRelations = relations(states, ({ many }) => ({
@@ -225,6 +274,7 @@ export const sitesRelations = relations(sites, ({ one, many }) => ({
   siteWorkTypes: many(siteWorkTypes),
   siteSupervisorAssignments: many(siteSupervisorAssignments),
   siteSnapshots: many(siteSnapshots),
+  attendance: many(attendance),
 }))
 
 export const workTypesRelations = relations(workTypes, ({ many }) => ({
@@ -256,12 +306,31 @@ export const employeesRelations = relations(employees, ({ one, many }) => ({
   city: one(cities, { fields: [employees.cityId], references: [cities.id] }),
   siteSupervisorAssignments: many(siteSupervisorAssignments),
   submittedWorkers: many(workers),
+  morningMarkedAttendance: many(attendance, { relationName: 'morningMarker' }),
+  eveningMarkedAttendance: many(attendance, { relationName: 'eveningMarker' }),
 }))
 
-export const workersRelations = relations(workers, ({ one }) => ({
+export const workersRelations = relations(workers, ({ one, many }) => ({
   city: one(cities, { fields: [workers.cityId], references: [cities.id] }),
   submittedByEmployee: one(employees, {
     fields: [workers.submittedBy],
     references: [employees.id],
+  }),
+  attendance: many(attendance),
+}))
+
+export const attendanceRelations = relations(attendance, ({ one }) => ({
+  site: one(sites, { fields: [attendance.siteId], references: [sites.id] }),
+  worker: one(workers, { fields: [attendance.workerId], references: [workers.id] }),
+  city: one(cities, { fields: [attendance.cityId], references: [cities.id] }),
+  morningMarkedByEmployee: one(employees, {
+    fields: [attendance.morningMarkedBy],
+    references: [employees.id],
+    relationName: 'morningMarker',
+  }),
+  eveningMarkedByEmployee: one(employees, {
+    fields: [attendance.eveningMarkedBy],
+    references: [employees.id],
+    relationName: 'eveningMarker',
   }),
 }))

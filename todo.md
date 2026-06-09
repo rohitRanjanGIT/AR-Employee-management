@@ -1,7 +1,8 @@
 TO-DO:
 while editig the supervisor, it should load the original data as well in the edit form
 in the wotk type, no need to show created at, instead we can show how many sites are associated to that work type.
-
+no need to show aadhar in supervisor/workers, instead show contact number.
+In the ot rates section, instead of: 2h:₹205 / 4h:₹500 / 6h:₹1,000; we can just write:₹205/₹500/₹1,000
 
 DONE:
 - CRUD in work type — Edit (rename) and Delete (blocked if in use) added to WorkTypesClient.tsx

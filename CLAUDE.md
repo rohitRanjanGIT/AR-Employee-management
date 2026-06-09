@@ -49,12 +49,14 @@ src/
 │   ├── schema.ts                 # ALL 13 tables + all Drizzle relations in one file
 │   ├── index.ts                  # Drizzle client (exports `db`)
 │   ├── seed.ts                   # Seeds users, work type, sample state/city/site, supervisor assignment (idempotent)
-│   └── migrate-ot-rates.ts       # One-off: splits ot_rate into ot_rate_2hr/4hr/6hr (already run)
+│   ├── migrate-ot-rates.ts       # One-off: splits ot_rate into ot_rate_2hr/4hr/6hr (already run)
+│   └── migrate-attendance.ts     # One-off: creates attendance table + enums (already run)
 ├── lib/
 │   ├── auth.ts                   # better-auth server instance (exports `auth`)
 │   ├── auth-client.ts            # better-auth client (exports `authClient`)
 │   ├── utils.ts                  # shadcn `cn()` utility
 │   ├── india-geo.ts              # Static map: Indian state → major cities list
+│   ├── attendance.ts             # todayIST(), classifyDate(), derivedStatus(), computeWageForRow()
 │   ├── aadhaar.ts                # Server-only: AES-256-GCM encrypt/decrypt + re-exports from aadhaar-validate
 │   └── aadhaar-validate.ts       # Client-safe: Verhoeff checksum (validateAadhaar), maskAadhaar
 ├── middleware.ts                 # Optimistic session cookie check, redirects to /login
@@ -67,10 +69,14 @@ src/
 │   │                             # revokeSupervisorFromSite, deactivateSite, getSiteSnapshot
 │   ├── supervisors.ts            # createSupervisor, getAllSupervisors, updateSupervisor,
 │   │                             # deactivateSupervisor, reactivateSupervisor
-│   └── workers.ts                # createWorkerAsAdmin, submitWorkerAsSupervisor, getAllWorkers,
-│                                 # getWorkersForSupervisor, approveWorker, rejectWorker,
-│                                 # resubmitWorker, updateWorker, deleteWorker,
-│                                 # revealAadhaar, reassignWorkerCity
+│   ├── workers.ts                # createWorkerAsAdmin, submitWorkerAsSupervisor, getAllWorkers,
+│   │                             # getWorkersForSupervisor, approveWorker, rejectWorker,
+│   │                             # resubmitWorker, updateWorker, deleteWorker,
+│   │                             # revealAadhaar, reassignWorkerCity
+│   └── attendance.ts             # getWorkersForAttendance, markMorningAttendance, markEveningAttendance,
+│                                 # submitAttendanceEditRequest, resolveAttendanceEditRequest,
+│                                 # adminEditAttendance, getAttendanceForAdmin,
+│                                 # getAttendanceForSupervisor, getPendingEditRequests
 ├── components/
 │   ├── AdminNav.tsx              # Tab nav for admin (client, uses usePathname)
 │   ├── SupervisorNav.tsx         # Tab nav for supervisor
@@ -80,7 +86,7 @@ src/
     ├── login/page.tsx            # Email/password login
     ├── admin/
     │   ├── layout.tsx            # Auth check + header + AdminNav (shared for all admin pages)
-    │   ├── dashboard/page.tsx
+    │   ├── dashboard/page.tsx    # Pending attendance edit request count card
     │   ├── cities/
     │   │   ├── page.tsx          # Server: fetches cities + states
     │   │   └── CitiesClient.tsx  # Two-section UI: States table + Cities table
@@ -101,32 +107,43 @@ src/
     │   │   ├── CreateSupervisorDialog.tsx
     │   │   ├── EditSupervisorDialog.tsx
     │   │   └── DeactivateConfirmDialog.tsx  # handles both deactivate + reactivate
-    │   └── workers/
-    │       ├── page.tsx              # Server: fetches workers + active cities
-    │       ├── WorkersTable.tsx      # TanStack table; simplified columns; View/Approve/Reject per row
-    │       ├── WorkerDetailDialog.tsx  # View all fields; Approve/Reject/Edit/Delete actions
-    │       ├── CreateWorkerDialog.tsx
-    │       ├── ApproveWorkerDialog.tsx
-    │       ├── RejectWorkerDialog.tsx
-    │       ├── EditWorkerDialog.tsx
-    │       ├── ReassignCityDialog.tsx
-    │       └── AadhaarRevealButton.tsx  # 30s auto-mask, reveal logging
+    │   ├── workers/
+    │   │   ├── page.tsx              # Server: fetches workers + active cities
+    │   │   ├── WorkersTable.tsx      # TanStack table; simplified columns; View/Approve/Reject per row
+    │   │   ├── WorkerDetailDialog.tsx  # View all fields; Approve/Reject/Edit/Delete actions
+    │   │   ├── CreateWorkerDialog.tsx
+    │   │   ├── ApproveWorkerDialog.tsx
+    │   │   ├── RejectWorkerDialog.tsx
+    │   │   ├── EditWorkerDialog.tsx
+    │   │   ├── ReassignCityDialog.tsx
+    │   │   └── AadhaarRevealButton.tsx  # 30s auto-mask, reveal logging
+    │   └── attendance/
+    │       ├── page.tsx              # Server: fetches all records + pending requests + filter data
+    │       ├── AttendanceClient.tsx  # Tabbed: Attendance Records | Edit Requests
+    │       ├── AttendanceTable.tsx   # TanStack table; site/worker/status/edited filters; inline edit
+    │       ├── EditRequestsTable.tsx # Pending requests; approve/reject with confirm dialog
+    │       └── AdminEditDialog.tsx   # Direct morning/evening/OT edit form
     └── supervisor/
         ├── layout.tsx            # Auth check + header + SupervisorNav + status guard
         ├── dashboard/page.tsx    # Shows assigned site count + pending worker submissions
         ├── sites/page.tsx        # Card grid of assigned sites (read-only)
-        └── workers/
-            ├── page.tsx          # Server: workers + assigned cities
-            ├── WorkersList.tsx   # Tabbed: Active / My Submissions / Rejected
-            ├── SubmitWorkerDialog.tsx
-            └── ResubmitWorkerDialog.tsx
+        ├── workers/
+        │   ├── page.tsx          # Server: workers + assigned cities
+        │   ├── WorkersList.tsx   # Tabbed: Active / My Submissions / Rejected
+        │   ├── SubmitWorkerDialog.tsx
+        │   └── ResubmitWorkerDialog.tsx
+        └── attendance/
+            ├── page.tsx          # Server: card grid of active assigned sites
+            └── [siteId]/
+                ├── page.tsx              # Server: date param + getWorkersForAttendance
+                └── AttendanceMarking.tsx # Client: morning/evening tabs, worker list, OT, edit requests
 ```
 
 All admin and supervisor route folders have a `loading.tsx` skeleton.
 
 ---
 
-## Database schema (13 tables)
+## Database schema (14 tables)
 
 Declaration order in `schema.ts` matters due to FK references:
 
@@ -141,6 +158,7 @@ site_work_types                            ← junction: sites × work_types
 site_supervisor_assignments               ← junction: sites × employees
 workers                                    ← uuid PK, FK → cities + employees
 site_snapshots                             ← uuid PK, FK → sites (JSONB payload)
+attendance                                 ← uuid PK, FK → sites + workers + cities + employees (×2)
 ```
 
 All Drizzle `relations()` are declared at the **bottom** of `schema.ts` — never inline with table declarations.
@@ -153,6 +171,10 @@ All Drizzle `relations()` are declared at the **bottom** of `schema.ts` — neve
 - `workers` are separate from `employees` — employees are company staff (supervisors etc.), workers are site labour
 - `workers.aadhaarEncrypted` is NEVER returned to the client — always stripped with destructuring before returning
 - `workers.otRate2hr / otRate4hr / otRate6hr` — three OT rate tiers (2hr, 4hr, 6hr overtime); single `otRate` column was removed
+- `attendance` unique constraint: `(worker_id, site_id, date)` — one row per worker per site per day
+- `attendance.date` is a Drizzle `date()` column — returns a `'YYYY-MM-DD'` string, always compare as strings
+- `attendance.wageDailySnapshot / otRateSnapshot` — snapshotted from worker at first mark time, never updated after
+- `attendance.isLocked` — set by Module 1.4 payroll; blocks all edits once true
 
 **Worker business rules:**
 - Aadhaar is required (not optional) and validated with Verhoeff checksum
@@ -296,12 +318,12 @@ Receives `(checked: boolean, event: Event)` — not just `boolean`.
 | 1.1.5 Supervisors | ✅ Done | Create/edit supervisor accounts, view table, deactivate/reactivate, status blocks login, seed creates complete setup |
 | 1.2 Workers | ✅ Done | Aadhaar encryption, admin create/approve/reject/reassign, supervisor submit/resubmit, masked Aadhaar with 30s reveal log, tabbed supervisor UI |
 | 1.2.5 Worker improvements | ✅ Done | Full CRUD (edit/delete), WorkerDetailDialog, 3-tier OT rates, Aadhaar required+Verhoeff, age 18-45, phone uniqueness, work type edit/delete, loading skeletons, PopoverTrigger fix |
+| 1.3 Attendance | ✅ Done | attendance table, morning/evening marking, OT, yesterday edit, 2-7 day edit requests with admin approval, split-shift dimming, admin full table + edit requests tab, dashboard count card |
 
 Full specs in `docs/modules/`.
 
 ## Modules planned (not started)
 
-- 1.3 Attendance
 - 1.4 Wages
 - 1.5 Materials
 - 1.6 Expenses
@@ -318,7 +340,8 @@ pnpm lint                 # ESLint
 pnpm tsc --noEmit         # Type check
 pnpm drizzle-kit push     # Push schema changes to Neon (interactive — needs TTY)
 pnpm seed                 # Run src/db/seed.ts
-pnpm exec tsx src/db/migrate-ot-rates.ts  # Already run — splits ot_rate into 3 tiers
+pnpm exec tsx src/db/migrate-ot-rates.ts      # Already run — splits ot_rate into 3 tiers
+pnpm exec tsx src/db/migrate-attendance.ts   # Already run — creates attendance table + enums
 ```
 
 **Always run `pnpm tsc --noEmit` and `pnpm lint` before finishing any task.**

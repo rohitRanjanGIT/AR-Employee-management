@@ -1,26 +1,88 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --radius-md: 0.5rem;
+  --background: #f6f7fb;
+  --foreground: #151d35;
+  --card: #ffffff;
+  --card-foreground: #151d35;
+  --popover: #ffffff;
+  --popover-foreground: #151d35;
+  --primary: #17213d;
+  --primary-foreground: #ffffff;
+  --secondary: #eef1f7;
+  --secondary-foreground: #17213d;
+  --muted: #eef1f7;
+  --muted-foreground: #65708a;
+  --accent: #fde8e9;
+  --accent-foreground: #b9151c;
+  --destructive: #d71920;
+  --border: #d8deeb;
+  --input: #c8d0df;
+  --ring: #d71920;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.dark {
+  --background: #090d18;
+  --foreground: #eef2fb;
+  --card: #101727;
+  --card-foreground: #eef2fb;
+  --popover: #101727;
+  --popover-foreground: #eef2fb;
+  --primary: #eef2fb;
+  --primary-foreground: #111a31;
+  --secondary: #17213d;
+  --secondary-foreground: #eef2fb;
+  --muted: #17213d;
+  --muted-foreground: #a7b1c7;
+  --accent: #3a1721;
+  --accent-foreground: #ffb7bb;
+  --destructive: #ff4d55;
+  --border: #26314c;
+  --input: #303b57;
+  --ring: #ff4d55;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  background: var(--background);
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }

@@ -1,7 +1,7 @@
 'use server'
 
 import { db } from '@/db'
-import { workers, employees, cities, siteSupervisorAssignments } from '@/db/schema'
+import { workers, employees, cities, siteSupervisorAssignments, attendance } from '@/db/schema'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
 import { eq, and, inArray, or, ne } from 'drizzle-orm'
@@ -364,6 +364,11 @@ export async function deleteWorker(workerId: string) {
 
   const worker = await db.query.workers.findFirst({ where: eq(workers.id, workerId) })
   if (!worker) throw new Error('Worker not found')
+
+  const hasAttendance = await db.query.attendance.findFirst({
+    where: eq(attendance.workerId, workerId),
+  })
+  if (hasAttendance) throw new Error('Cannot delete worker with attendance records')
 
   await db.delete(workers).where(eq(workers.id, workerId))
   revalidatePath('/admin/workers')
