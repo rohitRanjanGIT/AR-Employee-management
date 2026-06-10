@@ -1,10 +1,16 @@
 TO-DO:
-while editig the supervisor, it should load the original data as well in the edit form
-in the wotk type, no need to show created at, instead we can show how many sites are associated to that work type.
-no need to show aadhar in supervisor/workers, instead show contact number.
-In the ot rates section, instead of: 2h:₹205 / 4h:₹500 / 6h:₹1,000; we can just write:₹205/₹500/₹1,000
+
 
 DONE:
+- Edit supervisor loads original data — confirmed EditSupervisorDialog uses react-hook-form `values` prop so all fields (name, phone, join date, salary, home city) pre-fill from the selected supervisor; removed leftover dead no-op code
+- Work type table shows associated site count instead of created-at — getAllWorkTypes() now aggregates site_work_types counts; WorkTypesClient column reads "Associated Sites" ("N sites" / "Not in use")
+- Supervisor workers table shows Contact (phone) instead of Aadhaar column
+- OT rates display condensed — supervisor workers OT summary now renders "₹205/₹500/₹1,000" (dropped the 2h/4h/6h prefixes and spaces)
+- Redesigned admin/attendance — new 3-tab layout (Overview | Records | Edit Requests). Overview (AttendanceOverview.tsx) has a per-day date navigator, 6 KPI cards (Marked, Full, Half, OT, Sites Active, Cities Active), a city-wise table (with coverage % vs active worker headcount) and a site-wise table that lists every active site (flags unmarked ones) with a "View records" drill-down that jumps to the Records tab pre-filtered by site+date. Records tab gained a date filter. page.tsx now computes per-city active-worker counts.
+- Clubbed Cities, Sites and Work Types under a collapsible "Site Management" group in the admin sidebar (AppSidebar now supports nav groups; mobile flattens groups to chips)
+- Sidebar is collapsible — desktop rail toggles between full (w-64) and icon-only (w-16), state persisted in localStorage; collapsed group icons expand the rail and open the group on click
+
+PREVIOUSLY DONE:
 - CRUD in work type — Edit (rename) and Delete (blocked if in use) added to WorkTypesClient.tsx
 - Loader while loading different pages and modules — loading.tsx added to admin/{dashboard,workers,work-types,sites,cities,supervisors} and supervisor/{dashboard,workers,sites}
 - CRUD in workers — Edit (admin EditWorkerDialog), Delete (admin inline confirm), View all details (WorkerDetailDialog with Approve/Reject/Edit/Delete inline)

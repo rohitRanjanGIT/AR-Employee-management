@@ -25,19 +25,30 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
 
   const activeSites = allSites
     .filter((s) => s.status === 'active')
-    .map((s) => ({ id: s.id, name: s.name }))
+    .map((s) => ({ id: s.id, name: s.name, cityName: s.city.name }))
 
-  const activeWorkers = workers
-    .filter((w) => w.status === 'active')
-    .map((w) => ({ id: w.id, name: w.name }))
+  const activeWorkers = workers.filter((w) => w.status === 'active')
+
+  const workerFilterOptions = activeWorkers.map((w) => ({ id: w.id, name: w.name }))
+
+  // Active worker headcount per city — drives the coverage metric in the overview
+  const cityCountMap = new Map<string, number>()
+  for (const w of activeWorkers) {
+    cityCountMap.set(w.city.name, (cityCountMap.get(w.city.name) ?? 0) + 1)
+  }
+  const cityWorkerCounts = [...cityCountMap.entries()].map(([city, total]) => ({ city, total }))
+
+  const initialTab =
+    tab === 'edit-requests' ? 'edit-requests' : tab === 'records' ? 'records' : 'overview'
 
   return (
     <AttendanceClient
-      initialTab={tab === 'edit-requests' ? 'edit-requests' : 'records'}
+      initialTab={initialTab}
       records={records}
       pendingRequests={pendingRequests}
       sites={activeSites}
-      workers={activeWorkers}
+      workers={workerFilterOptions}
+      cityWorkerCounts={cityWorkerCounts}
     />
   )
 }

@@ -41,13 +41,15 @@ type AttendanceRecord = {
   eveningMarkedByEmployee: { name: string } | null
 }
 
-type SiteFilter = { id: string; name: string }
+type SiteFilter = { id: string; name: string; cityName?: string }
 type WorkerFilter = { id: string; name: string }
 
 interface Props {
   records: AttendanceRecord[]
   sites: SiteFilter[]
   workers: WorkerFilter[]
+  initialSiteId?: string
+  initialDate?: string
   onToast: (msg: string) => void
 }
 
@@ -59,15 +61,25 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const col = createColumnHelper<AttendanceRecord>()
 
-export function AttendanceTable({ records, sites, workers, onToast }: Props) {
-  const [siteFilter, setSiteFilter] = useState('')
-  const [siteFilterName, setSiteFilterName] = useState('')
+export function AttendanceTable({
+  records,
+  sites,
+  workers,
+  initialSiteId = '',
+  initialDate = '',
+  onToast,
+}: Props) {
+  const [siteFilter, setSiteFilter] = useState(initialSiteId)
+  const [siteFilterName, setSiteFilterName] = useState(
+    sites.find((s) => s.id === initialSiteId)?.name ?? ''
+  )
   const [workerFilter, setWorkerFilter] = useState('')
   const [workerFilterName, setWorkerFilterName] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [statusFilterName, setStatusFilterName] = useState('')
   const [editedFilter, setEditedFilter] = useState('')
   const [editedFilterName, setEditedFilterName] = useState('')
+  const [dateFilter, setDateFilter] = useState(initialDate)
 
   const [editRecord, setEditRecord] = useState<AttendanceRecord | null>(null)
   const [editOpen, setEditOpen] = useState(false)
@@ -79,9 +91,10 @@ export function AttendanceTable({ records, sites, workers, onToast }: Props) {
       if (statusFilter && r.derivedStatus !== statusFilter) return false
       if (editedFilter === 'edited' && !r.isEdited) return false
       if (editedFilter === 'not_edited' && r.isEdited) return false
+      if (dateFilter && r.date !== dateFilter) return false
       return true
     })
-  }, [records, siteFilter, workerFilter, statusFilter, editedFilter])
+  }, [records, siteFilter, workerFilter, statusFilter, editedFilter, dateFilter])
 
   const columns = useMemo(
     () => [
@@ -212,14 +225,22 @@ export function AttendanceTable({ records, sites, workers, onToast }: Props) {
     setStatusFilterName('')
     setEditedFilter('')
     setEditedFilterName('')
+    setDateFilter('')
   }
 
-  const hasFilters = !!(siteFilter || workerFilter || statusFilter || editedFilter)
+  const hasFilters = !!(siteFilter || workerFilter || statusFilter || editedFilter || dateFilter)
 
   return (
     <div className="space-y-4">
       {/* Filters */}
       <div className="flex flex-wrap gap-2 items-center">
+        <input
+          type="date"
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value)}
+          className="h-8 rounded-md border bg-background px-2 text-xs text-foreground"
+        />
+
         <Select
           value={siteFilter}
           onValueChange={(v: string | null) => {

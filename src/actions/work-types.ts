@@ -1,11 +1,11 @@
 'use server'
 
 import { db } from '@/db'
-import { workTypes } from '@/db/schema'
+import { workTypes, siteWorkTypes } from '@/db/schema'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
-import { eq } from 'drizzle-orm'
+import { eq, count } from 'drizzle-orm'
 import { z } from 'zod'
 
 async function requireAdmin() {
@@ -55,5 +55,16 @@ export async function deleteWorkType(id: string) {
 }
 
 export async function getAllWorkTypes() {
-  return db.query.workTypes.findMany({ orderBy: (wt, { asc }) => [asc(wt.name)] })
+  const rows = await db.query.workTypes.findMany({
+    orderBy: (wt, { asc }) => [asc(wt.name)],
+  })
+
+  const siteCounts = await db
+    .select({ workTypeId: siteWorkTypes.workTypeId, total: count() })
+    .from(siteWorkTypes)
+    .groupBy(siteWorkTypes.workTypeId)
+
+  const countMap = new Map(siteCounts.map((c) => [c.workTypeId, Number(c.total)]))
+
+  return rows.map((wt) => ({ ...wt, siteCount: countMap.get(wt.id) ?? 0 }))
 }

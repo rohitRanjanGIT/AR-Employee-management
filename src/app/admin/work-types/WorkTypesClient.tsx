@@ -33,7 +33,7 @@ import {
 import { createWorkType, updateWorkType, deleteWorkType } from '@/actions/work-types'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 
-type WorkType = { id: string; name: string; createdAt: Date }
+type WorkType = { id: string; name: string; createdAt: Date; siteCount: number }
 
 const schema = z.object({ name: z.string().min(1, 'Name is required').max(100) })
 type FormValues = z.infer<typeof schema>
@@ -110,9 +110,16 @@ export function WorkTypesClient({ workTypes }: { workTypes: WorkType[] }) {
 
   const columns = [
     col.accessor('name', { header: 'Name' }),
-    col.accessor('createdAt', {
-      header: 'Created At',
-      cell: (info) => new Date(info.getValue()).toLocaleDateString(),
+    col.accessor('siteCount', {
+      header: 'Associated Sites',
+      cell: (info) => {
+        const n = info.getValue()
+        return n > 0 ? (
+          <span className="text-sm">{n} site{n !== 1 ? 's' : ''}</span>
+        ) : (
+          <span className="text-muted-foreground text-sm">Not in use</span>
+        )
+      },
     }),
     col.display({
       id: 'actions',

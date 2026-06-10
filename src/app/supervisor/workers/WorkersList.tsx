@@ -54,9 +54,9 @@ const col = createColumnHelper<Worker>()
 
 function otSummary(w: Worker) {
   const parts = [w.otRate2hr, w.otRate4hr, w.otRate6hr]
-    .map((v, i) => v ? `${['2','4','6'][i]}h:₹${Number(v).toLocaleString('en-IN')}` : null)
+    .map((v) => (v ? `₹${Number(v).toLocaleString('en-IN')}` : null))
     .filter(Boolean)
-  return parts.length ? parts.join(' / ') : null
+  return parts.length ? parts.join('/') : null
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -88,11 +88,13 @@ function WorkerTable({ data, extraColumns }: { data: Worker[]; extraColumns?: Co
             : <span className="text-muted-foreground">—</span>
         },
       }),
-      col.accessor('aadhaarDisplay', {
-        header: 'Aadhaar',
+      col.accessor('phone', {
+        header: 'Contact',
         cell: (info) => {
           const v = info.getValue()
-          return <span className="font-mono text-sm">{v ?? 'Not provided'}</span>
+          return v
+            ? <span className="text-sm tabular-nums">{v}</span>
+            : <span className="text-muted-foreground text-sm">—</span>
         },
       }),
       ...(extraColumns ?? []),

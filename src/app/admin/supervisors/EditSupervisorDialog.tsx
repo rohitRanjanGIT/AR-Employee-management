@@ -84,13 +84,6 @@ export function EditSupervisorDialog({
       : undefined,
   })
 
-  // Keep display name in sync with the supervisor prop
-  // (values prop handles form fields; selectedCityName drives the Select label)
-  const derivedCityName = supervisor?.homeCity?.name ?? ''
-  if (selectedCityName !== derivedCityName && !open) {
-    // reset display name when dialog closes so it's fresh on reopen
-  }
-
   function handleClose() {
     reset()
     setSelectedCityName(supervisor?.homeCity?.name ?? '')
