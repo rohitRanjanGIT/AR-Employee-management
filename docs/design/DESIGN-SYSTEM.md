@@ -504,26 +504,40 @@ neutral: "border-t-4 border-t-border"      + text "text-muted-foreground"
 ### Font family
 - Single family: **Inter** (`--font-inter`). Both `--font-sans` and `--font-heading` map to it (so `font-heading` === `font-sans` here). No explicit fallback stack is declared beyond Tailwind v4's default (`font-sans` → Inter, then system fallbacks). `<html>` carries `antialiased`.
 
-### Size scale actually used
-| Class | Where |
-|---|---|
-| `text-[10px]` | gallery tag chips, mobile bottom-nav labels |
-| `text-xs` | helper/caption text, badges, table sub-text, tooltips, pagination page count |
-| `text-[0.8rem]` | button `sm` size |
-| `text-sm` | **the dominant body size** — tables, inputs, nav items, descriptions, most labels |
-| `text-base` | inputs/textarea (mobile, `md:text-sm`), card/dialog/sheet titles |
-| `text-xl` | supervisor greeting headline (`text-xl font-bold`) |
-| `text-2xl` | **page H1** (`PageHeader`, dashboard headers): `text-2xl font-semibold` |
-| `text-3xl` | KPI tile big numbers: `text-3xl font-bold leading-none` |
+### Exact type scale (Tailwind v4 defaults — no custom sizes defined)
+All sizes are stock Tailwind classes; the exact rendered values (1rem = 16px) are:
 
-> No `text-4xl`+ in use. Tables/UI default to `text-sm`; large numbers cap at `text-3xl`.
+| Class | Font size | Default line-height | Typical weight | Where it appears |
+|---|---|---|---|---|
+| `text-[10px]` | **10px** | inherited | 500–600 | gallery tag chips (`font-semibold`), mobile bottom-nav labels (`font-medium`), attendance "Modified" badge (`h-4 px-1`) |
+| `text-xs` | **0.75rem / 12px** | 1rem / 16px | 400–500 | helper/caption text, badges, two-line-cell sub-text (`role · ₹wage/day`), tooltips, pagination `x / y`, call-card labels & time windows, custom-table column headers (`uppercase tracking-wide`), orange count pills |
+| `text-[0.8rem]` | **0.8rem / 12.8px** | inherited | 500 | Button `size="sm"` label only |
+| `text-sm` | **0.875rem / 14px** | 1.25rem / 20px | 400 body · 500 emphasis | **the dominant body size** — tables, inputs (desktop), nav items, page descriptions, form labels, default buttons, dialog body |
+| `text-base` | **1rem / 16px** | 1.5rem / 24px | 400 inputs · 500 titles | inputs/textarea on mobile (`md:text-sm` shrinks to 14px on ≥768px), Card/Dialog/Sheet titles (`font-medium`) |
+| `text-xl` | **1.25rem / 20px** | 1.75rem / 28px | 700 | supervisor greeting headline (`text-xl font-bold`) |
+| `text-2xl` | **1.5rem / 24px** | 2rem / 32px | 600 | **page H1** (`PageHeader`, dashboard headers): `text-2xl font-semibold`; attendance metric values (`text-2xl font-semibold`) |
+| `text-3xl` | **1.875rem / 30px** | 2.25rem / 36px (overridden by `leading-none`) | 700 | KPI tile big numbers: `text-3xl font-bold leading-none` |
 
-### Weight usage
-- `font-medium` — default for buttons, badges, nav labels, table headers (`TableHead`), card titles, labels, tabs.
-- `font-semibold` — page H1 (`text-2xl font-semibold`), sidebar brand, user name, quick-action labels, KPI sub-labels.
-- `font-bold` — KPI big numbers, avatar initials, greeting headline.
-- `font-normal`/(unset) — body cells, descriptions.
-- Card title is **`font-medium`** not bold (`font-heading text-base leading-snug font-medium`).
+> No `text-4xl`+ in use anywhere. Tables/UI default to 14px; large numbers cap at 30px.
+
+### Weight usage (Inter numeric weights)
+`font-normal` = **400**, `font-medium` = **500**, `font-semibold` = **600**, `font-bold` = **700**. No other weights used.
+- `font-medium` (500) — default for buttons, badges, nav labels, table headers (`TableHead`), card titles, labels, tabs, P/A toggle buttons, call pills.
+- `font-semibold` (600) — page H1 (`text-2xl font-semibold`), sidebar brand, user name, quick-action labels, KPI sub-labels, attendance metric values.
+- `font-bold` (700) — KPI big numbers, avatar initials, greeting headline.
+- `font-normal`/(unset, 400) — body cells, descriptions.
+- Card title is **`font-medium` (500)** not bold (`font-heading text-base leading-snug font-medium`).
+
+### Canonical UI text strings (verbatim)
+Reproduce these literal strings exactly:
+- Brand (sidebar + mobile header): **`Anuranjan EMS`** — `text-sm font-semibold tracking-tight` (14px / 600).
+- Reload button tooltip: `Refresh`. Sidebar toggle tooltips: `Collapse sidebar` / `Expand sidebar`. Theme toggle tooltips: `Switch to light mode` / `Switch to dark mode`. Logout tooltip: `Logout`.
+- Attendance CTAs: `Mark Now →`, `View Attendance →`, `View / Edit`, `View`, `All Present`, `All Absent`, `Save Attendance` / `Saving…`, `Send for Approval`, `Submit for Approval` / `Submitting…`, `← Back to Dashboard`.
+- Call windows: `Morning Call` `7:00 AM – 11:00 AM` · `Evening Call` `5:00 PM – 8:00 PM`. Badges: `Marked`, `Window Open`, `Upcoming`, `Closed`. Status: `Opens at 7:00 AM` / `Opens at 5:00 PM`, `Window closed. View or request a change.`
+- Pagination: `Showing {from}–{to} of {n} records`, `← Prev`, `Next →`, `{page} / {totalPages}`.
+- Empty states: `No workers found.`, `No attendance records in the last 30 days.`, `You have no active sites assigned. Contact your admin.`, `No approved workers found for this site's city.`
+- Lock notices: `Today's submitted attendance is locked. Contact admin for corrections.`, `This record is older than 2 days and cannot be changed.`
+- Empty value placeholder: em-dash `—` (never "N/A" or blank).
 
 ### Line-height & letter-spacing
 - `leading-none` (KPI numbers, dialog title), `leading-tight` (user name/email, labels, greeting), `leading-snug` (CardTitle), `leading-none` on small count pills.
@@ -952,4 +966,107 @@ export function todayIST(): string {                // "YYYY-MM-DD" en-CA in IST
     d. **Forms/dialogs** — `Dialog` (`rounded-xl`, ring, full-bleed `bg-muted/50` footer), RHF `FormItem grid gap-2`, `space-y-4` rows, `grid grid-cols-2 gap-4`, errors `text-destructive text-sm`, submit shows progressive verb while `isSubmitting`.
 14. **Reproduce the hardcoded semantic colours** from §2 exactly where they appear (orange count pills, green/red trend text, inventory movement pills, gallery tag colours, amber/indigo change-request pills, greeting-strip top-border states) — these live inline, not in the token system.
 15. **Mount sonner `<Toaster/>` only if you intend to use toasts** — note the source project ships the component but never mounts it and never calls `toast()`; errors are surfaced inline and `window.confirm()` is used for confirmations. Match that behavior for pixel fidelity, or wire toasts up deliberately as an improvement.
-```
+
+---
+
+## 11. UX specification — how the app behaves
+
+This section describes the *interaction design*: where chrome controls live, how data is presented, and the complete UX of the supervisor attendance module.
+
+### 11.1 The shell: sidebar, theme toggle, login/logout placement
+
+**Desktop (≥1024px).** A single persistent left sidebar (`app-shell.tsx`) frames every authenticated page. There is **no top header bar on desktop** — the page's own `PageHeader` H1 acts as the title. Sidebar anatomy, top to bottom:
+
+1. **Brand row** (`h-14`, bottom border): the text `Anuranjan EMS` at left, and a **collapse toggle** (ghost icon button `size-8`, `PanelLeftClose`/`PanelLeftOpen`) at right. Collapsing shrinks the sidebar `w-56` (224px) → `w-[60px]` icon-only rail with `transition-[width] duration-200`; the choice persists in `localStorage["sidebar-collapsed"]`. When collapsed, each nav icon gets a native `title` tooltip and the brand text disappears.
+2. **Nav list** (scrollable, `flex-1`): one `Link` per module (admin has 16, supervisor 11 — see §5.8 icon order). Items are 14px, icon `size-4`, `gap-3`. **Active = red text + semibold, no background pill**; inactive = muted gray, hover darkens text only. Active match is exact `pathname === href`.
+3. **User footer** (top border, `p-3`) — this is where the session controls live:
+   - **Avatar**: `size-9` square (`rounded`, not circle), solid primary red, white bold initials (first letters of first two name words, uppercased).
+   - **Name + email**: stacked, truncating (`text-sm font-semibold` / `text-xs text-muted-foreground`).
+   - **Theme toggle**: ghost icon button (`size-8`) showing `Moon` in light mode / `Sun` in dark mode. One click flips light↔dark via next-themes (`attribute="class"`, default **light**). It renders nothing until mounted (hydration guard).
+   - **Logout**: ghost icon button (`size-8`, `LogOut` icon) at the far right. Clicking calls `signOut()` then `router.push("/login")` — no confirmation dialog.
+   - Collapsed state stacks ThemeToggle → avatar (`size-8`) → Logout vertically, centered.
+
+**Login** has no button in the shell — it is its own route `/login`: a vertically+horizontally centered `Card` (`max-w-sm`) on the bare background, with a **full-width primary red submit** (`Sign in`, shows `Signing in…` while pending). Auth guards (`requireAdmin`/`requireSupervisor`) redirect unauthenticated visits there.
+
+**Mobile (<1024px).** The sidebar hides; a `h-14` top header appears with a hamburger (`Menu`, ghost icon) + brand text. The hamburger opens a **left Sheet** (`w-56 p-0`, no close button — tap outside or navigate to dismiss) containing the *identical* sidebar component, so theme toggle and logout are in the same footer position. Supervisor pages additionally get a **fixed bottom nav** (4 items, 56px min-height targets, active = red, live green pulse dot on Attendance).
+
+### 11.2 The reload button — instant refresh on every page
+
+Every list/detail page renders `<PageHeader title description>` whose right edge is a **`ReloadButton`** (`reload-button.tsx`):
+
+- Position: top-right of the content area, vertically aligned with the H1 (`flex items-start justify-between gap-4`).
+- Appearance: borderless `RefreshCw` icon (16px) in muted gray, `p-1.5 rounded-md`, hover = `bg-muted` + darker icon. Tooltip `Refresh`.
+- Behavior: one click calls **`router.refresh()`** — Next.js re-runs the page's server components and re-fetches all data **without a full browser reload** (scroll, client state, and URL filters survive). The icon spins (`animate-spin`) for **800ms** as confirmation, then stops.
+- Rationale: pages are RSC-rendered snapshots; this gives users a one-tap way to pull fresh attendance/approval/inventory data. Because filters, site selection, and pagination live in **URL search params** (see §11.4), refresh never loses context.
+- Exception: dashboard pages swap the ReloadButton for a segmented time-range toggle (§5.1); client-side widgets there auto-refresh via React Query (`staleTime: 20s`).
+
+### 11.3 Supervisor attendance module — complete UX
+
+Route family: `/supervisor/attendance` (dashboard) → `/supervisor/attendance/mark` (marking flow) → `/supervisor/attendance/view` (day detail / change requests). All dates and clock logic use **IST (Asia/Kolkata)**.
+
+#### 11.3.1 Attendance dashboard (`attendance/page.tsx`)
+
+Layout, top to bottom (`space-y-6`):
+
+1. **Header row**: `PageHeader` ("Attendance" / "Mark daily attendance and view logs for your sites.") with ReloadButton; if the supervisor has **more than one active site**, a `Select` (`w-64`) sits at the right. Choosing a site does `router.replace(?siteId=…)` — **the URL is the state**, so the whole page re-renders server-side for that site and the view is shareable/bookmarkable. Items show `Site Name · City`. With zero active sites the page short-circuits to a bordered empty state: *"You have no active sites assigned. Contact your admin."*
+
+2. **"Today's Calls"** (section heading `text-sm font-medium text-muted-foreground`): a 2-up card grid (1 col mobile, 2 cols ≥640px) — one `CallCard` for **☀ Morning Call (7:00 AM – 11:00 AM)** and one for **🌙 Evening Call (5:00 PM – 8:00 PM)**. Each card derives its state from the current IST hour + whether the call is already marked:
+   | State | Visual | Body |
+   |---|---|---|
+   | Window open, unmarked | highlighted card `border-primary/50 bg-primary/5`, solid red badge **Window Open** | full-width primary button **Mark Now →** |
+   | Marked (any time) | `bg-muted/20`, badge **Marked** | green `{n} present` + muted `{n} absent`, `Marked at HH:MM`, full-width outline **View Attendance →** |
+   | Before window | badge **Upcoming** (outline) | muted `Opens at 7:00 AM` / `5:00 PM` |
+   | After window, unmarked | badge **Closed** (secondary) | italic *"Window closed. View or request a change."* (underlined link to day view) |
+   This makes the daily task glanceable: the only red/highlighted card is the one needing action *right now*.
+
+3. **Attendance Overview** (`attendance-metrics.tsx`): heading + a **segmented period toggle** (`Today | This Week | This Month` — joined `rounded-lg border divide-x` pill row, `text-xs px-3 py-1.5`, active segment = solid primary red on white text; client-side state, no reload). Below, a 4-tile grid (2 cols mobile / 4 cols ≥640px), each tile `rounded-lg border p-4`: label (12px muted) → **value 24px semibold** → context line (12px muted):
+   - **Present Calls** (+ `{n}% attendance`), **Absent Calls** (muted value, `of {total} total`), **OT Hours** (`overtime logged`), **Total Pay** (₹ en-IN, `wages + OT`).
+
+4. **Attendance Log (last 30 days)**: a custom div-grid list table (`attendance-log-table.tsx`) — `rounded-lg border overflow-hidden`, header bar `bg-muted/40` with 12px uppercase tracking-wide column labels, `divide-y` rows, hover `bg-muted/20`. Fixed column widths: Date 110px, Site flex, Morning 110px, Evening 110px, Present 90px, Action 110px. Per row:
+   - **Date**: relative label (`Today` / `Yesterday` / `Mon`) 14px medium + absolute date (`9 Jun`) 12px muted underneath.
+   - **Morning / Evening**: a `CallPill` (`text-xs px-2.5 py-1 rounded-full font-medium`) showing `{present}/{total}` — **amber** tint for fully-present morning, **indigo** for evening (the module's signature color-coding), muted gray for partial, plain muted `—` if that call was never marked.
+   - **Present**: combined `{present}/{totalCalls}` 14px medium.
+   - **Action**: rows ≤2 days old get an outline **View / Edit** button; older rows a ghost **View** (h-7, 12px).
+   - **Pagination**: server-side, **15 rows/page**, `?page=` in the URL; `PaginationBar` below shows `Showing 1–15 of 42 records` left and `← Prev · 2 / 3 · Next →` right (disabled buttons at bounds).
+
+#### 11.3.2 Marking flow (`attendance/mark?siteId&callType`)
+
+Reached only via **Mark Now** during an open window. Guards: invalid params or unassigned site → redirect to dashboard; **if the call is already marked → redirect to the day view** (a call can be submitted exactly once — no double marking).
+
+- **Header**: `Morning Call · {Site Name}` / `Marking attendance for {YYYY-MM-DD}.`
+- **Live summary chips**: `{n} workers` (muted) + red badge `{x} present` + secondary badge `{y} absent`, updating as toggles change.
+- **Bulk actions**: outline **All Present** / **All Absent** buttons (both reset OT to 0).
+- **Roster** (custom div-grid, columns `1fr 140px 160px`, header `WORKER | STATUS | OVERTIME`):
+  - Worker cell: name 14px medium; sub-line 12px muted = `mono employee-ID` + `Skilled/Semi-Skilled/Helper · ₹{wage}/day`.
+  - Status: a two-button **P / A segmented toggle** — selected **P** = solid primary red, selected **A** = muted gray; unselected = transparent with border. Absent rows tint `bg-muted/20`.
+  - Overtime: `Select` with exactly three options — `No OT`, `2hr OT · ₹{ot2hrWage}`, `4hr OT · ₹{ot4hrWage}`; **disabled while absent** (and forced to 0).
+- **Footer**: errors inline left in red; right side **Cancel** (outline, back to dashboard) + **Save Attendance** (primary, `Saving…` while pending). Save calls the `markAttendance` server action then returns to the dashboard, where the call card now shows **Marked** and is locked.
+
+#### 11.3.3 Day view & change requests (`attendance/view?siteId&date`)
+
+One screen serves both read-only review and post-hoc corrections, governed by **record age**:
+
+| Age | Mode | Why |
+|---|---|---|
+| Today (diff 0) | **read-only** | submitted calls are locked; banner: *"Today's submitted attendance is locked. Contact admin for corrections."* |
+| 1–2 days ago | **editable via change request** | corrections allowed but must be admin-approved |
+| >2 days | **read-only** | banner: *"This record is older than 2 days and cannot be changed."* |
+| Future dates | redirected away | — |
+
+- **Header**: site name H1; description = long date (`Tuesday, 9 June 2026`) + `· Changes require admin approval` or `· Read only`; an outline **← Back to Dashboard** button top-right.
+- **Table**: date banner bar, then columns `Worker | ☀ Morning | 🌙 Evening | (action)` (grid `1fr 180px 180px auto`). Each call cell renders per mode:
+  - *Read-only*: `Present`/`Absent` Badge + optional `2hr OT · ₹{amount}` line; `Not marked` (12px muted) when there is no record.
+  - *Editable*: the same P/A toggle + OT select as the marking grid (compact `h-7`), plus a tiny 10px outline **Modified** badge once the value differs from the original. When a worker row has ≥1 modification, a **Send for Approval** button (outline, h-7) appears in the action column.
+- **Reason modal** (Dialog, `max-w-md`, title **Submit Change Request**): summarizes Worker, Date, and each change (`morning: present · 2hr OT`), then a required `Textarea` labelled **Reason for change** (placeholder *"Explain why this change is needed…"*, 3 rows). Footer: Cancel (outline) + **Submit for Approval** (`Submitting…` while pending; empty reason blocks with inline red error).
+- On success the row tints green (`bg-green-50/30 dark:bg-green-900/10`), shows green *"Change request submitted"*, and its controls lock. The request lands in the admin module (Approvals / attendance change-requests review) and appears in the supervisor's **Pending Requests** page.
+
+**UX intent of the module**: marking is deliberately *windowed, one-shot, and immutable* (anti-fraud); corrections always leave an audit trail (reason + admin approval); everything the supervisor needs for "did I do today's job?" is answered by the two call cards before any scrolling.
+
+### 11.4 How data & tables are represented (app-wide conventions)
+
+- **Two table idioms**: (a) **TanStack `<table>`** for admin CRUD lists — toolbar (search `Input max-w-xs` + label-style `Select` filters left, action buttons right) above a `rounded-lg border` table, 40px header row, `hover:bg-muted/50`, no zebra striping; (b) **custom div-grid list tables** for attendance — same border/radius shell, `bg-muted/40` header bar with 12px UPPERCASE labels, `divide-y` rows. Both put empty states as a centered muted message (`py-12`).
+- **Cell conventions**: two-line cells (name 14px medium over 12px muted meta); employee IDs in `font-mono`; money always `₹` + `en-IN` lakh/crore grouping, no decimals; counts as `x/y`; numerics `tabular-nums`; missing values are an em-dash `—`, never blank.
+- **Status is always a pill**: `Badge` variants for entity status (`capitalize`), bespoke colored pills for domain semantics (amber morning / indigo evening, inventory movement types, orange pending counts).
+- **URL-as-state**: site selection (`?siteId=`), pagination (`?page=`), and filters live in search params; navigation is done with `router.replace`/`Link`, so browser back/forward, sharing, and the ReloadButton all preserve exactly what the user was looking at.
+- **Freshness model**: pages are server-rendered on request; the per-page ReloadButton re-fetches via `router.refresh()`; client widgets (dashboards) use React Query with 20s `staleTime`. There are no websockets/polling — "live" feel comes from cheap one-tap refresh.
+- **Feedback**: inline red `<p class="text-sm text-destructive">` next to the action (no toasts), progressive verb on submit buttons (`Saving…`, `Submitting…`), `window.confirm()` for destructive confirmations, green tint + message for completed row-level actions.

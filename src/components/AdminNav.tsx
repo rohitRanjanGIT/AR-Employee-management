@@ -28,6 +28,6 @@ const navItems: NavEntry[] = [
   { label: 'Attendance', href: '/admin/attendance', icon: CalendarDays },
 ]
 
-export function AdminNav() {
-  return <AppSidebar title="Admin Modules" subtitle="Manage EMS operations" items={navItems} />
+export function AdminNav({ userName, userEmail }: { userName: string; userEmail: string }) {
+  return <AppSidebar brand="Anuranjan EMS" userName={userName} userEmail={userEmail} items={navItems} />
 }

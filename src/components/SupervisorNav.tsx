@@ -10,6 +10,6 @@ const navItems = [
   { label: 'Attendance', href: '/supervisor/attendance', icon: CalendarDays },
 ]
 
-export function SupervisorNav() {
-  return <AppSidebar title="Supervisor Modules" subtitle="Site field workflow" items={navItems} />
+export function SupervisorNav({ userName, userEmail }: { userName: string; userEmail: string }) {
+  return <AppSidebar brand="Anuranjan EMS" userName={userName} userEmail={userEmail} items={navItems} />
 }
