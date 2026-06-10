@@ -47,15 +47,21 @@ export default function LoginPage() {
   // If a valid session already exists, skip the form and route by role.
   useEffect(() => {
     let active = true
-    authClient.getSession().then((session) => {
-      if (!active) return
-      const role = session.data?.user?.role as string | undefined
-      if (role) {
-        router.replace(dashboardForRole(role))
-      } else {
-        setCheckingSession(false)
-      }
-    })
+    authClient
+      .getSession()
+      .then((session) => {
+        if (!active) return
+        const role = session.data?.user?.role as string | undefined
+        if (role) {
+          router.replace(dashboardForRole(role))
+        } else {
+          setCheckingSession(false)
+        }
+      })
+      .catch(() => {
+        // Never hang on the splash if the session check fails — show the form.
+        if (active) setCheckingSession(false)
+      })
     return () => {
       active = false
     }
