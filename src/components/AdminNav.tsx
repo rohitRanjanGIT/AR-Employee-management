@@ -8,6 +8,7 @@ import {
   HardHat,
   Layers,
   MapPinned,
+  Settings,
   UserRoundCog,
 } from 'lucide-react'
 import { AppSidebar, type NavEntry } from '@/components/AppSidebar'
@@ -26,6 +27,7 @@ const navItems: NavEntry[] = [
   { label: 'Supervisors', href: '/admin/supervisors', icon: UserRoundCog },
   { label: 'Workers', href: '/admin/workers', icon: HardHat },
   { label: 'Attendance', href: '/admin/attendance', icon: CalendarDays },
+  { label: 'Settings', href: '/settings', icon: Settings },
 ]
 
 export function AdminNav({ userName, userEmail }: { userName: string; userEmail: string }) {

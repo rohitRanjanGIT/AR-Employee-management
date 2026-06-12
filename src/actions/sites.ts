@@ -38,14 +38,31 @@ export async function generateSiteCode(cityId: string, siteName: string): Promis
   return `${city.shortCode}S${index}${nameAbbrev}`
 }
 
-const createSiteSchema = z.object({
-  cityId: z.string().uuid(),
-  name: z.string().min(1).max(200),
-  code: z.string().min(2).max(20).toUpperCase(),
-  tenderPrice: z.string().optional(),
-  totalProjectCost: z.string().optional(),
-  workTypeIds: z.array(z.string().uuid()).optional(),
-})
+const createSiteSchema = z
+  .object({
+    cityId: z.string().uuid(),
+    name: z.string().min(1).max(200),
+    code: z.string().min(2).max(20).toUpperCase(),
+    tenderPrice: z.string().optional(),
+    totalProjectCost: z.string().optional(),
+    workTypeIds: z.array(z.string().uuid()).optional(),
+    morningAttendanceStart: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+    morningAttendanceEnd: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+    eveningAttendanceStart: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+    eveningAttendanceEnd: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  })
+  .refine(
+    (d) => {
+      const morningComplete =
+        (!d.morningAttendanceStart && !d.morningAttendanceEnd) ||
+        (!!d.morningAttendanceStart && !!d.morningAttendanceEnd)
+      const eveningComplete =
+        (!d.eveningAttendanceStart && !d.eveningAttendanceEnd) ||
+        (!!d.eveningAttendanceStart && !!d.eveningAttendanceEnd)
+      return morningComplete && eveningComplete
+    },
+    { message: 'Both start and end times must be provided for each shift' }
+  )
 
 export async function createSite(input: z.infer<typeof createSiteSchema>) {
   await requireAdmin()
@@ -66,6 +83,10 @@ export async function createSite(input: z.infer<typeof createSiteSchema>) {
       code: data.code,
       tenderPrice: data.tenderPrice ?? null,
       totalProjectCost: data.totalProjectCost ?? null,
+      morningAttendanceStart: data.morningAttendanceStart ?? null,
+      morningAttendanceEnd: data.morningAttendanceEnd ?? null,
+      eveningAttendanceStart: data.eveningAttendanceStart ?? null,
+      eveningAttendanceEnd: data.eveningAttendanceEnd ?? null,
     })
     .returning()
 
@@ -184,4 +205,45 @@ export async function getSiteSnapshot(siteId: string) {
     where: eq(siteSnapshots.siteId, siteId),
     with: { site: { with: { city: true } } },
   })
+}
+
+const updateAttendanceWindowSchema = z
+  .object({
+    siteId: z.string().uuid(),
+    morningAttendanceStart: z.string().regex(/^\d{2}:\d{2}$/).nullable(),
+    morningAttendanceEnd: z.string().regex(/^\d{2}:\d{2}$/).nullable(),
+    eveningAttendanceStart: z.string().regex(/^\d{2}:\d{2}$/).nullable(),
+    eveningAttendanceEnd: z.string().regex(/^\d{2}:\d{2}$/).nullable(),
+  })
+  .refine(
+    (d) => {
+      const morningComplete =
+        (!d.morningAttendanceStart && !d.morningAttendanceEnd) ||
+        (!!d.morningAttendanceStart && !!d.morningAttendanceEnd)
+      const eveningComplete =
+        (!d.eveningAttendanceStart && !d.eveningAttendanceEnd) ||
+        (!!d.eveningAttendanceStart && !!d.eveningAttendanceEnd)
+      return morningComplete && eveningComplete
+    },
+    { message: 'Both start and end times must be provided for each shift' }
+  )
+
+export async function updateSiteAttendanceWindows(
+  input: z.infer<typeof updateAttendanceWindowSchema>
+) {
+  await requireAdmin()
+  const data = updateAttendanceWindowSchema.parse(input)
+
+  await db
+    .update(sites)
+    .set({
+      morningAttendanceStart: data.morningAttendanceStart,
+      morningAttendanceEnd: data.morningAttendanceEnd,
+      eveningAttendanceStart: data.eveningAttendanceStart,
+      eveningAttendanceEnd: data.eveningAttendanceEnd,
+      updatedAt: new Date(),
+    })
+    .where(eq(sites.id, data.siteId))
+
+  revalidatePath('/admin/sites')
 }

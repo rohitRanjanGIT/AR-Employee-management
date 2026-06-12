@@ -13,6 +13,8 @@ type AttendanceRecord = {
   eveningMarkedAt: Date | null
   ot: 'none' | '2hr' | '4hr'
   derivedStatus: 'full' | 'half' | 'absent'
+  isMorningLate: boolean
+  isEveningLate: boolean
   isEdited: boolean
   isLocked: boolean
   worker: { id: string; name: string; category: string }

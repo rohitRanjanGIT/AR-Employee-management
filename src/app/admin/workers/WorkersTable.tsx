@@ -81,8 +81,8 @@ function StatusBadge({ status }: { status: Worker['status'] }) {
 export function WorkersTable({ workers, cities }: { workers: Worker[]; cities: City[] }) {
   const router = useRouter()
 
-  const [statusFilter, setStatusFilter] = useState('pending')
-  const [statusFilterName, setStatusFilterName] = useState('Pending')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [statusFilterName, setStatusFilterName] = useState('All Status')
   const [cityFilter, setCityFilter] = useState('all')
   const [cityFilterName, setCityFilterName] = useState('All Cities')
   const [categoryFilter, setCategoryFilter] = useState('all')

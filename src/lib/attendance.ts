@@ -22,6 +22,28 @@ export function derivedStatus(
   return 'half'
 }
 
+/**
+ * Checks if a given timestamp falls within an HH:MM–HH:MM window.
+ * Returns true if on time, false if late or outside the window entirely.
+ * If no window is configured (start/end are null), always returns true (on time).
+ */
+export function isWithinWindow(
+  markedAt: Date,
+  windowStart: string | null,
+  windowEnd: string | null
+): boolean {
+  if (!windowStart || !windowEnd) return true
+
+  const [startH, startM] = windowStart.split(':').map(Number)
+  const [endH, endM] = windowEnd.split(':').map(Number)
+
+  const markMinutes = markedAt.getHours() * 60 + markedAt.getMinutes()
+  const startMinutes = startH * 60 + startM
+  const endMinutes = endH * 60 + endM
+
+  return markMinutes >= startMinutes && markMinutes <= endMinutes
+}
+
 export function computeWageForRow({
   derivedStatus,
   wageDailySnapshot,

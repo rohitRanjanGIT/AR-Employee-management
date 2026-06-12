@@ -46,17 +46,18 @@ Only `admin` and `supervisor` have UI built so far.
 src/
 ├── env.ts                        # env var validation — import env vars from here, never process.env!
 ├── db/
-│   ├── schema.ts                 # ALL 13 tables + all Drizzle relations in one file
+│   ├── schema.ts                 # ALL 14 tables + all Drizzle relations in one file
 │   ├── index.ts                  # Drizzle client (exports `db`)
 │   ├── seed.ts                   # Seeds users, work type, sample state/city/site, supervisor assignment (idempotent)
 │   ├── migrate-ot-rates.ts       # One-off: splits ot_rate into ot_rate_2hr/4hr/6hr (already run)
-│   └── migrate-attendance.ts     # One-off: creates attendance table + enums (already run)
+│   ├── migrate-attendance.ts     # One-off: creates attendance table + enums (already run)
+│   └── migrate-attendance-windows.ts  # One-off: adds site time windows + late flags (already run)
 ├── lib/
 │   ├── auth.ts                   # better-auth server instance (exports `auth`)
 │   ├── auth-client.ts            # better-auth client (exports `authClient`)
 │   ├── utils.ts                  # shadcn `cn()` utility
 │   ├── india-geo.ts              # Static map: Indian state → major cities list
-│   ├── attendance.ts             # todayIST(), classifyDate(), derivedStatus(), computeWageForRow()
+│   ├── attendance.ts             # todayIST(), classifyDate(), derivedStatus(), isWithinWindow(), computeWageForRow()
 │   ├── aadhaar.ts                # Server-only: AES-256-GCM encrypt/decrypt + re-exports from aadhaar-validate
 │   └── aadhaar-validate.ts       # Client-safe: Verhoeff checksum (validateAadhaar), maskAadhaar
 ├── middleware.ts                 # Optimistic session cookie check, redirects to /login
@@ -66,24 +67,36 @@ src/
 │   ├── work-types.ts             # createWorkType, updateWorkType, deleteWorkType, getAllWorkTypes
 │   ├── sites.ts                  # createSite, getAllSites, getSupervisorSites,
 │   │                             # getSupervisorEmployees (active only), assignSupervisorToSite,
-│   │                             # revokeSupervisorFromSite, deactivateSite, getSiteSnapshot
+│   │                             # revokeSupervisorFromSite, deactivateSite, getSiteSnapshot,
+│   │                             # updateSiteAttendanceWindows
 │   ├── supervisors.ts            # createSupervisor, getAllSupervisors, updateSupervisor,
 │   │                             # deactivateSupervisor, reactivateSupervisor
 │   ├── workers.ts                # createWorkerAsAdmin, submitWorkerAsSupervisor, getAllWorkers,
 │   │                             # getWorkersForSupervisor, approveWorker, rejectWorker,
 │   │                             # resubmitWorker, updateWorker, deleteWorker,
 │   │                             # revealAadhaar, reassignWorkerCity
+│   ├── profile.ts                # updateOwnProfile, changeOwnPassword, resetSupervisorPassword
+│   │                             # (via auth.$context password hasher), removeSupervisor (hard delete)
 │   └── attendance.ts             # getWorkersForAttendance, markMorningAttendance, markEveningAttendance,
 │                                 # submitAttendanceEditRequest, resolveAttendanceEditRequest,
 │                                 # adminEditAttendance, getAttendanceForAdmin,
 │                                 # getAttendanceForSupervisor, getPendingEditRequests
 ├── components/
-│   ├── AdminNav.tsx              # Tab nav for admin (client, uses usePathname)
-│   ├── SupervisorNav.tsx         # Tab nav for supervisor
+│   ├── AppSidebar.tsx            # Collapsible sidebar shell (desktop tree + mobile bar, theme + logout); nav configs feed in
+│   ├── AdminNav.tsx              # Admin nav config → AppSidebar (groups Cities/Sites/Work Types under "Site Management")
+│   ├── SupervisorNav.tsx         # Supervisor nav config → AppSidebar
+│   ├── ThemeProvider.tsx         # Light/dark theme context (useTheme)
+│   ├── ThemeToggle.tsx           # Standalone theme toggle button (mobile headers)
 │   └── ui/                       # shadcn components (base-nova style)
 └── app/
     ├── page.tsx                  # Redirects to /login
     ├── login/page.tsx            # Email/password login
+    ├── api/auth/[...all]/route.ts  # better-auth catch-all handler (GET + POST)
+    ├── settings/                 # Shared (admin + supervisor)
+    │   ├── layout.tsx            # Role-aware: renders AdminNav or SupervisorNav for the session
+    │   ├── page.tsx              # Account Settings — fetches own employee record
+    │   ├── ProfileForm.tsx       # Update own name + phone
+    │   └── ChangePasswordForm.tsx  # Change own password (current → new + confirm)
     ├── admin/
     │   ├── layout.tsx            # Auth check + header + AdminNav (shared for all admin pages)
     │   ├── dashboard/page.tsx    # Pending attendance edit request count card
@@ -95,18 +108,22 @@ src/
     │   │   └── WorkTypesClient.tsx  # Create/edit/delete work types
     │   ├── sites/
     │   │   ├── page.tsx          # Server: fetches sites + supervisors + work types + cities
-    │   │   ├── SitesTable.tsx    # Main TanStack table with filters
-    │   │   ├── CreateSiteDialog.tsx
+    │   │   ├── SitesTable.tsx    # TanStack table (Name/Code/City/Work Types/Status); all actions in Actions column
+    │   │   ├── CreateSiteDialog.tsx  # Includes optional attendance time-window fields
+    │   │   ├── SiteDetailDialog.tsx  # Read view: price/cost/windows/work types/supervisors (with revoke)
     │   │   ├── AssignSupervisorDialog.tsx
     │   │   ├── DeactivateSiteDialog.tsx
-    │   │   ├── SiteSupervisorList.tsx
+    │   │   ├── EditTimeWindowsDialog.tsx  # Edit a site's morning/evening attendance windows
+    │   │   ├── SiteSupervisorList.tsx  # Supervisor chips with revoke popover (used in SiteDetailDialog)
     │   │   └── [siteId]/snapshot/page.tsx
     │   ├── supervisors/
     │   │   ├── page.tsx              # Server: fetches supervisors + active cities
-    │   │   ├── SupervisorsTable.tsx  # TanStack table with status filter
+    │   │   ├── SupervisorsTable.tsx  # TanStack table; status filter; Edit/Reset Password/Deactivate/Remove per row
     │   │   ├── CreateSupervisorDialog.tsx
     │   │   ├── EditSupervisorDialog.tsx
-    │   │   └── DeactivateConfirmDialog.tsx  # handles both deactivate + reactivate
+    │   │   ├── DeactivateConfirmDialog.tsx  # handles both deactivate + reactivate
+    │   │   ├── ResetPasswordDialog.tsx      # Admin sets a new password (ends supervisor's session)
+    │   │   └── RemoveSupervisorDialog.tsx   # Permanent hard delete; type-name-to-confirm
     │   ├── workers/
     │   │   ├── page.tsx              # Server: fetches workers + active cities
     │   │   ├── WorkersTable.tsx      # TanStack table; simplified columns; View/Approve/Reject per row
@@ -119,8 +136,9 @@ src/
     │   │   └── AadhaarRevealButton.tsx  # 30s auto-mask, reveal logging
     │   └── attendance/
     │       ├── page.tsx              # Server: fetches all records + pending requests + filter data
-    │       ├── AttendanceClient.tsx  # Tabbed: Attendance Records | Edit Requests
-    │       ├── AttendanceTable.tsx   # TanStack table; site/worker/status/edited filters; inline edit
+    │       ├── AttendanceClient.tsx  # Tabbed: Overview | Records | Edit Requests
+    │       ├── AttendanceOverview.tsx # Per-site/day coverage summary; drill-down into Records
+    │       ├── AttendanceTable.tsx   # TanStack table; site/worker/status/edited filters; late badges; inline edit
     │       ├── EditRequestsTable.tsx # Pending requests; approve/reject with confirm dialog
     │       └── AdminEditDialog.tsx   # Direct morning/evening/OT edit form
     └── supervisor/
@@ -139,7 +157,7 @@ src/
                 └── AttendanceMarking.tsx # Client: morning/evening tabs, worker list, OT, edit requests
 ```
 
-All admin and supervisor route folders have a `loading.tsx` skeleton.
+All admin, supervisor, and settings route folders have a `loading.tsx` skeleton.
 
 ---
 
@@ -175,6 +193,8 @@ All Drizzle `relations()` are declared at the **bottom** of `schema.ts` — neve
 - `attendance.date` is a Drizzle `date()` column — returns a `'YYYY-MM-DD'` string, always compare as strings
 - `attendance.wageDailySnapshot / otRateSnapshot` — snapshotted from worker at first mark time, never updated after
 - `attendance.isLocked` — set by Module 1.4 payroll; blocks all edits once true
+- `sites.morningAttendanceStart/End` + `eveningAttendanceStart/End` — nullable `HH:MM` strings; null = no time restriction
+- `attendance.isMorningLate/isEveningLate` — set at mark time via `isWithinWindow()` in `lib/attendance.ts`
 
 **Worker business rules:**
 - Aadhaar is required (not optional) and validated with Verhoeff checksum
@@ -319,6 +339,7 @@ Receives `(checked: boolean, event: Event)` — not just `boolean`.
 | 1.2 Workers | ✅ Done | Aadhaar encryption, admin create/approve/reject/reassign, supervisor submit/resubmit, masked Aadhaar with 30s reveal log, tabbed supervisor UI |
 | 1.2.5 Worker improvements | ✅ Done | Full CRUD (edit/delete), WorkerDetailDialog, 3-tier OT rates, Aadhaar required+Verhoeff, age 18-45, phone uniqueness, work type edit/delete, loading skeletons, PopoverTrigger fix |
 | 1.3 Attendance | ✅ Done | attendance table, morning/evening marking, OT, yesterday edit, 2-7 day edit requests with admin approval, split-shift dimming, admin full table + edit requests tab, dashboard count card |
+| 1.3-pre Profile/Windows/Fix | ✅ Done | Shared `/settings` (own profile + password change); admin reset supervisor password + permanent remove; site attendance time windows (morning/evening HH:MM) with late flags on marks + late badge + supervisor warning toast; workers table defaults to all statuses |
 
 Full specs in `docs/modules/`.
 
@@ -342,6 +363,7 @@ pnpm drizzle-kit push     # Push schema changes to Neon (interactive — needs T
 pnpm seed                 # Run src/db/seed.ts
 pnpm exec tsx src/db/migrate-ot-rates.ts      # Already run — splits ot_rate into 3 tiers
 pnpm exec tsx src/db/migrate-attendance.ts   # Already run — creates attendance table + enums
+pnpm exec tsx src/db/migrate-attendance-windows.ts  # Already run — adds site time windows + late flags
 ```
 
 **Always run `pnpm tsc --noEmit` and `pnpm lint` before finishing any task.**

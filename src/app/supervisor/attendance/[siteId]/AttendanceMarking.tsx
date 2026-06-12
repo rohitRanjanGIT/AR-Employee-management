@@ -139,15 +139,18 @@ export function AttendanceMarking({
     const presentWorkerIds = Array.from(checkedIds)
     startTransition(async () => {
       try {
-        if (tab === 'morning') {
-          await markMorningAttendance({ siteId, date, presentWorkerIds })
-        } else {
-          await markEveningAttendance({ siteId, date, presentWorkerIds, otMap })
-        }
+        const result =
+          tab === 'morning'
+            ? await markMorningAttendance({ siteId, date, presentWorkerIds })
+            : await markEveningAttendance({ siteId, date, presentWorkerIds, otMap })
         setCheckedIds(new Set())
         setOtMap({})
         router.refresh()
-        showToast(`${tab === 'morning' ? 'Morning' : 'Evening'} attendance marked`)
+        if (result?.late) {
+          showToast('Attendance marked outside the scheduled window — it will be flagged as late.')
+        } else {
+          showToast(`${tab === 'morning' ? 'Morning' : 'Evening'} attendance marked`)
+        }
       } catch (e) {
         showToast((e as Error).message)
       }

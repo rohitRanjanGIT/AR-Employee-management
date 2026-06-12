@@ -22,7 +22,8 @@ import {
 import { CreateSiteDialog } from './CreateSiteDialog'
 import { AssignSupervisorDialog } from './AssignSupervisorDialog'
 import { DeactivateSiteDialog } from './DeactivateSiteDialog'
-import { SiteSupervisorList } from './SiteSupervisorList'
+import { EditTimeWindowsDialog } from './EditTimeWindowsDialog'
+import { SiteDetailDialog } from './SiteDetailDialog'
 
 type WorkType = { id: string; name: string }
 type City = { id: string; name: string; shortCode: string; status: string }
@@ -35,6 +36,10 @@ type Site = {
   status: string
   tenderPrice: string | null
   totalProjectCost: string | null
+  morningAttendanceStart: string | null
+  morningAttendanceEnd: string | null
+  eveningAttendanceStart: string | null
+  eveningAttendanceEnd: string | null
   createdAt: Date
   city: City
   siteWorkTypes: { id: string; siteId: string; workTypeId: string; workType: WorkType }[]
@@ -59,6 +64,8 @@ export function SitesTable({
   const [statusFilter, setStatusFilter] = useState('all')
   const [assignTarget, setAssignTarget] = useState<Site | null>(null)
   const [deactivateTarget, setDeactivateTarget] = useState<Site | null>(null)
+  const [windowsTarget, setWindowsTarget] = useState<Site | null>(null)
+  const [detailTarget, setDetailTarget] = useState<Site | null>(null)
 
   const filtered = useMemo(() => {
     return sites.filter((s) => {
@@ -95,20 +102,6 @@ export function SitesTable({
           )
         },
       }),
-      col.accessor('siteSupervisorAssignments', {
-        header: 'Supervisors',
-        cell: (info) => (
-          <SiteSupervisorList siteId={info.row.original.id} assignments={info.getValue()} />
-        ),
-      }),
-      col.accessor('tenderPrice', {
-        header: 'Tender Price',
-        cell: (info) => info.getValue() ? `₹${Number(info.getValue()).toLocaleString()}` : '—',
-      }),
-      col.accessor('totalProjectCost', {
-        header: 'Project Cost',
-        cell: (info) => info.getValue() ? `₹${Number(info.getValue()).toLocaleString()}` : '—',
-      }),
       col.accessor('status', {
         header: 'Status',
         cell: (info) => (
@@ -121,11 +114,17 @@ export function SitesTable({
         cell: ({ row }) => {
           const site = row.original
           return (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => setDetailTarget(site)}>
+                View Details
+              </Button>
               {site.status === 'active' && (
                 <>
                   <Button size="sm" variant="outline" onClick={() => setAssignTarget(site)}>
                     Assign
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setWindowsTarget(site)}>
+                    Edit Time Windows
                   </Button>
                   <Button size="sm" variant="destructive" onClick={() => setDeactivateTarget(site)}>
                     Deactivate
@@ -227,6 +226,16 @@ export function SitesTable({
         site={deactivateTarget}
         open={!!deactivateTarget}
         onOpenChange={(o) => { if (!o) setDeactivateTarget(null) }}
+      />
+      <EditTimeWindowsDialog
+        site={windowsTarget}
+        open={!!windowsTarget}
+        onOpenChange={(o) => { if (!o) setWindowsTarget(null) }}
+      />
+      <SiteDetailDialog
+        site={detailTarget}
+        open={!!detailTarget}
+        onOpenChange={(o) => { if (!o) setDetailTarget(null) }}
       />
     </div>
   )

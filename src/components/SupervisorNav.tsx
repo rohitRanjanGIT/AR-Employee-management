@@ -1,6 +1,6 @@
 'use client'
 
-import { Building2, CalendarDays, Gauge, HardHat } from 'lucide-react'
+import { Building2, CalendarDays, Gauge, HardHat, Settings } from 'lucide-react'
 import { AppSidebar } from '@/components/AppSidebar'
 
 const navItems = [
@@ -8,6 +8,7 @@ const navItems = [
   { label: 'Sites', href: '/supervisor/sites', icon: Building2 },
   { label: 'Workers', href: '/supervisor/workers', icon: HardHat },
   { label: 'Attendance', href: '/supervisor/attendance', icon: CalendarDays },
+  { label: 'Settings', href: '/settings', icon: Settings },
 ]
 
 export function SupervisorNav({ userName, userEmail }: { userName: string; userEmail: string }) {

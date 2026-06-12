@@ -33,6 +33,8 @@ type AttendanceRecord = {
   eveningMarkedAt: Date | null
   ot: 'none' | '2hr' | '4hr'
   derivedStatus: 'full' | 'half' | 'absent'
+  isMorningLate: boolean
+  isEveningLate: boolean
   isEdited: boolean
   isLocked: boolean
   worker: { id: string; name: string; category: string }
@@ -132,11 +134,16 @@ export function AttendanceTable({
           const row = info.row.original
           if (!info.getValue()) return <span className="text-muted-foreground">—</span>
           return (
-            <span
-              className="text-green-600 cursor-help"
-              title={row.morningMarkedByEmployee ? `Marked by ${row.morningMarkedByEmployee.name}` : ''}
-            >
-              ✓
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="text-green-600 cursor-help"
+                title={row.morningMarkedByEmployee ? `Marked by ${row.morningMarkedByEmployee.name}` : ''}
+              >
+                ✓
+              </span>
+              {row.isMorningLate && (
+                <Badge variant="outline" className="text-xs text-amber-600">Late</Badge>
+              )}
             </span>
           )
         },
@@ -147,11 +154,16 @@ export function AttendanceTable({
           const row = info.row.original
           if (!info.getValue()) return <span className="text-muted-foreground">—</span>
           return (
-            <span
-              className="text-green-600 cursor-help"
-              title={row.eveningMarkedByEmployee ? `Marked by ${row.eveningMarkedByEmployee.name}` : ''}
-            >
-              ✓
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="text-green-600 cursor-help"
+                title={row.eveningMarkedByEmployee ? `Marked by ${row.eveningMarkedByEmployee.name}` : ''}
+              >
+                ✓
+              </span>
+              {row.isEveningLate && (
+                <Badge variant="outline" className="text-xs text-amber-600">Late</Badge>
+              )}
             </span>
           )
         },

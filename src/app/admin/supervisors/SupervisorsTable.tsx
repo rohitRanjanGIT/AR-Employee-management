@@ -27,6 +27,8 @@ import {
 import { CreateSupervisorDialog } from './CreateSupervisorDialog'
 import { EditSupervisorDialog } from './EditSupervisorDialog'
 import { DeactivateConfirmDialog } from './DeactivateConfirmDialog'
+import { ResetPasswordDialog } from './ResetPasswordDialog'
+import { RemoveSupervisorDialog } from './RemoveSupervisorDialog'
 
 type City = { id: string; name: string }
 type AssignedSite = { siteId: string; siteName: string; siteCode: string; cityName: string }
@@ -68,6 +70,14 @@ export function SupervisorsTable({
   const [statusFilterName, setStatusFilterName] = useState('All')
   const [editTarget, setEditTarget] = useState<Supervisor | null>(null)
   const [dialogTarget, setDialogTarget] = useState<{ supervisor: Supervisor; mode: 'deactivate' | 'reactivate' } | null>(null)
+  const [resetTarget, setResetTarget] = useState<Supervisor | null>(null)
+  const [removeTarget, setRemoveTarget] = useState<Supervisor | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+
+  function showToast(msg: string) {
+    setToast(msg)
+    setTimeout(() => setToast(null), 3000)
+  }
 
   const filtered = useMemo(
     () => supervisors.filter((s) => statusFilter === 'all' || s.status === statusFilter),
@@ -113,9 +123,12 @@ export function SupervisorsTable({
         cell: ({ row }) => {
           const s = row.original
           return (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button variant="outline" size="sm" onClick={() => setEditTarget(s)}>
                 Edit
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setResetTarget(s)}>
+                Reset Password
               </Button>
               {s.status === 'active' ? (
                 <Button
@@ -134,6 +147,9 @@ export function SupervisorsTable({
                   Reactivate
                 </Button>
               )}
+              <Button variant="destructive" size="sm" onClick={() => setRemoveTarget(s)}>
+                Remove
+              </Button>
             </div>
           )
         },
@@ -151,6 +167,12 @@ export function SupervisorsTable({
 
   return (
     <div className="space-y-4">
+      {toast && (
+        <div className="fixed top-4 right-4 z-50 bg-foreground text-background px-4 py-2 rounded shadow text-sm">
+          {toast}
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Supervisors</h1>
         <CreateSupervisorDialog cities={cities} />
@@ -226,6 +248,20 @@ export function SupervisorsTable({
         mode={dialogTarget?.mode ?? 'deactivate'}
         open={!!dialogTarget}
         onOpenChange={(o) => { if (!o) setDialogTarget(null) }}
+      />
+
+      <ResetPasswordDialog
+        supervisor={resetTarget}
+        open={!!resetTarget}
+        onOpenChange={(o) => { if (!o) setResetTarget(null) }}
+        onSuccess={showToast}
+      />
+
+      <RemoveSupervisorDialog
+        supervisor={removeTarget}
+        open={!!removeTarget}
+        onOpenChange={(o) => { if (!o) setRemoveTarget(null) }}
+        onSuccess={showToast}
       />
     </div>
   )

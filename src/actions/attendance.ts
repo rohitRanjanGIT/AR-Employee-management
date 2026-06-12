@@ -13,7 +13,7 @@ import { headers } from 'next/headers'
 import { eq, and, inArray } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { todayIST, classifyDate, derivedStatus } from '@/lib/attendance'
+import { todayIST, classifyDate, derivedStatus, isWithinWindow } from '@/lib/attendance'
 
 // ─── Auth guards ──────────────────────────────────────────────────────────────
 
@@ -123,6 +123,11 @@ export async function markMorningAttendance(input: z.infer<typeof markMorningSch
   if (site.status === 'inactive') throw new Error('Site is inactive')
 
   const now = new Date()
+  const isMorningLate = !isWithinWindow(
+    now,
+    site.morningAttendanceStart ?? null,
+    site.morningAttendanceEnd ?? null
+  )
 
   for (const workerId of data.presentWorkerIds) {
     const worker = await db.query.workers.findFirst({ where: eq(workers.id, workerId) })
@@ -142,6 +147,7 @@ export async function markMorningAttendance(input: z.infer<typeof markMorningSch
         .set({
           morningMarkedAt: now,
           morningMarkedBy: employee.id,
+          isMorningLate,
           derivedStatus: derivedStatus(now, existing.eveningMarkedAt),
           isEdited: dateContext === 'yesterday' ? true : existing.isEdited,
           updatedAt: now,
@@ -155,6 +161,7 @@ export async function markMorningAttendance(input: z.infer<typeof markMorningSch
         date: data.date,
         morningMarkedAt: now,
         morningMarkedBy: employee.id,
+        isMorningLate,
         wageDailySnapshot: worker.wageDaily,
         otRateSnapshot: worker.otRate2hr ?? null,
         derivedStatus: 'half',
@@ -165,6 +172,7 @@ export async function markMorningAttendance(input: z.infer<typeof markMorningSch
 
   revalidatePath('/supervisor/attendance')
   revalidatePath('/admin/attendance')
+  return { late: isMorningLate }
 }
 
 // ─── Mark Evening Attendance ──────────────────────────────────────────────────
@@ -195,6 +203,11 @@ export async function markEveningAttendance(input: z.infer<typeof markEveningSch
   if (site.status === 'inactive') throw new Error('Site is inactive')
 
   const now = new Date()
+  const isEveningLate = !isWithinWindow(
+    now,
+    site.eveningAttendanceStart ?? null,
+    site.eveningAttendanceEnd ?? null
+  )
 
   for (const workerId of data.presentWorkerIds) {
     const worker = await db.query.workers.findFirst({ where: eq(workers.id, workerId) })
@@ -219,6 +232,7 @@ export async function markEveningAttendance(input: z.infer<typeof markEveningSch
         .set({
           eveningMarkedAt: now,
           eveningMarkedBy: employee.id,
+          isEveningLate,
           ot: finalOt,
           derivedStatus: status,
           isEdited: dateContext === 'yesterday' ? true : existing.isEdited,
@@ -233,6 +247,7 @@ export async function markEveningAttendance(input: z.infer<typeof markEveningSch
         date: data.date,
         eveningMarkedAt: now,
         eveningMarkedBy: employee.id,
+        isEveningLate,
         wageDailySnapshot: worker.wageDaily,
         otRateSnapshot: worker.otRate2hr ?? null,
         derivedStatus: 'half',
@@ -243,6 +258,7 @@ export async function markEveningAttendance(input: z.infer<typeof markEveningSch
 
   revalidatePath('/supervisor/attendance')
   revalidatePath('/admin/attendance')
+  return { late: isEveningLate }
 }
 
 // ─── Submit Edit Request (2+ days back) ───────────────────────────────────────

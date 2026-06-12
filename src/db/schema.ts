@@ -140,6 +140,11 @@ export const sites = pgTable('sites', {
   tenderPrice: decimal('tender_price', { precision: 14, scale: 2 }),
   totalProjectCost: decimal('total_project_cost', { precision: 14, scale: 2 }),
   status: siteStatusEnum('status').notNull().default('active'),
+  // Attendance time windows — plain HH:MM 24-hour strings; null means no restriction
+  morningAttendanceStart: text('morning_attendance_start'),
+  morningAttendanceEnd: text('morning_attendance_end'),
+  eveningAttendanceStart: text('evening_attendance_start'),
+  eveningAttendanceEnd: text('evening_attendance_end'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 })
@@ -242,6 +247,9 @@ export const attendance = pgTable(
     otRateSnapshot: decimal('ot_rate_snapshot', { precision: 10, scale: 2 }),
 
     derivedStatus: attendanceStatusEnum('derived_status').notNull().default('half'),
+
+    isMorningLate: boolean('is_morning_late').notNull().default(false),
+    isEveningLate: boolean('is_evening_late').notNull().default(false),
 
     isEdited: boolean('is_edited').notNull().default(false),
     editRequest: jsonb('edit_request'),

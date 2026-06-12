@@ -29,13 +29,30 @@ import { Plus, RefreshCw } from 'lucide-react'
 type City = { id: string; name: string; shortCode: string; status: string }
 type WorkType = { id: string; name: string }
 
-const schema = z.object({
-  cityId: z.string().uuid('Select a city'),
-  name: z.string().min(1, 'Site name is required').max(200),
-  code: z.string().min(2, 'Code is required').max(20),
-  tenderPrice: z.string().optional(),
-  totalProjectCost: z.string().optional(),
-})
+const schema = z
+  .object({
+    cityId: z.string().uuid('Select a city'),
+    name: z.string().min(1, 'Site name is required').max(200),
+    code: z.string().min(2, 'Code is required').max(20),
+    tenderPrice: z.string().optional(),
+    totalProjectCost: z.string().optional(),
+    morningAttendanceStart: z.string().optional(),
+    morningAttendanceEnd: z.string().optional(),
+    eveningAttendanceStart: z.string().optional(),
+    eveningAttendanceEnd: z.string().optional(),
+  })
+  .refine(
+    (d) =>
+      (!d.morningAttendanceStart && !d.morningAttendanceEnd) ||
+      (!!d.morningAttendanceStart && !!d.morningAttendanceEnd),
+    { message: 'Both morning start and end are required', path: ['morningAttendanceEnd'] }
+  )
+  .refine(
+    (d) =>
+      (!d.eveningAttendanceStart && !d.eveningAttendanceEnd) ||
+      (!!d.eveningAttendanceStart && !!d.eveningAttendanceEnd),
+    { message: 'Both evening start and end are required', path: ['eveningAttendanceEnd'] }
+  )
 type FormValues = z.infer<typeof schema>
 
 export function CreateSiteDialog({
@@ -92,7 +109,15 @@ export function CreateSiteDialog({
     setServerError('')
     startTransition(async () => {
       try {
-        await createSite({ ...values, code: values.code.toUpperCase(), workTypeIds: selectedWorkTypes })
+        await createSite({
+          ...values,
+          code: values.code.toUpperCase(),
+          workTypeIds: selectedWorkTypes,
+          morningAttendanceStart: values.morningAttendanceStart || undefined,
+          morningAttendanceEnd: values.morningAttendanceEnd || undefined,
+          eveningAttendanceStart: values.eveningAttendanceStart || undefined,
+          eveningAttendanceEnd: values.eveningAttendanceEnd || undefined,
+        })
         reset()
         setSelectedWorkTypes([])
         setSelectedCityName('')
@@ -183,6 +208,36 @@ export function CreateSiteDialog({
                 ))}
               </div>
             )}
+          </div>
+
+          <div className="space-y-3 border-t pt-4">
+            <div>
+              <Label>Attendance Time Windows</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Supervisors marking outside these windows will be flagged as late. Leave blank for no
+                restriction.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-muted-foreground">Morning</p>
+              <div className="grid grid-cols-2 gap-3">
+                <Input type="time" {...register('morningAttendanceStart')} aria-label="Morning start" />
+                <Input type="time" {...register('morningAttendanceEnd')} aria-label="Morning end" />
+              </div>
+              {errors.morningAttendanceEnd && (
+                <p className="text-xs text-destructive">{errors.morningAttendanceEnd.message}</p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-muted-foreground">Evening</p>
+              <div className="grid grid-cols-2 gap-3">
+                <Input type="time" {...register('eveningAttendanceStart')} aria-label="Evening start" />
+                <Input type="time" {...register('eveningAttendanceEnd')} aria-label="Evening end" />
+              </div>
+              {errors.eveningAttendanceEnd && (
+                <p className="text-xs text-destructive">{errors.eveningAttendanceEnd.message}</p>
+              )}
+            </div>
           </div>
 
           {serverError && <p className="text-xs text-destructive">{serverError}</p>}
