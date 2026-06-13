@@ -1,0 +1,120 @@
+'use client'
+
+import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
+import { Eye, EyeOff } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogClose,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { resetAdminPassword } from '@/actions/admins'
+
+type Admin = { userId: string; name: string }
+
+export function ResetAdminPasswordDialog({
+  admin,
+  open,
+  onOpenChange,
+  onSuccess,
+}: {
+  admin: Admin | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSuccess?: (msg: string) => void
+}) {
+  const router = useRouter()
+  const [newPassword, setNewPassword] = useState('')
+  const [show, setShow] = useState(false)
+  const [error, setError] = useState('')
+  const [isPending, startTransition] = useTransition()
+
+  function handleClose() {
+    setNewPassword('')
+    setShow(false)
+    setError('')
+  }
+
+  function handleSubmit() {
+    if (!admin) return
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters')
+      return
+    }
+    setError('')
+    startTransition(async () => {
+      try {
+        await resetAdminPassword({ userId: admin.userId, newPassword })
+        onOpenChange(false)
+        handleClose()
+        router.refresh()
+        onSuccess?.('Password reset. Share the new password with the admin.')
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Something went wrong')
+      }
+    })
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) handleClose()
+        onOpenChange(o)
+      }}
+    >
+      <DialogContent>
+        <DialogTitle>Reset Password</DialogTitle>
+        {admin && (
+          <div className="space-y-4 mt-1">
+            <p className="text-sm text-muted-foreground">
+              Set a new password for{' '}
+              <span className="font-medium text-foreground">{admin.name}</span>.
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="reset-admin-password">New Password</Label>
+              <div className="relative">
+                <Input
+                  id="reset-admin-password"
+                  type={show ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={(e) => {
+                    setNewPassword(e.target.value)
+                    setError('')
+                  }}
+                  placeholder="Min. 8 characters"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShow((v) => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  tabIndex={-1}
+                >
+                  {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+            </div>
+            <p className="text-xs text-yellow-600">
+              This will immediately end the admin&apos;s current session.
+            </p>
+            {error && <p className="text-xs text-destructive">{error}</p>}
+          </div>
+        )}
+        <DialogFooter className="mt-2">
+          <DialogClose render={<Button variant="outline" type="button" disabled={isPending} />}>
+            Cancel
+          </DialogClose>
+          <Button onClick={handleSubmit} disabled={isPending}>
+            {isPending ? 'Resetting…' : 'Reset Password'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}

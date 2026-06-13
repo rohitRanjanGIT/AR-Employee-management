@@ -16,6 +16,12 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
   },
+  session: {
+    // Sessions last 2 hours from login. updateAge ≥ expiresIn disables the
+    // sliding-renewal window, so it's a hard 2-hour cap — re-login required after.
+    expiresIn: 60 * 60 * 2, // 2 hours (seconds)
+    updateAge: 60 * 60 * 2, // 2 hours (seconds)
+  },
   user: {
     additionalFields: {
       role: {

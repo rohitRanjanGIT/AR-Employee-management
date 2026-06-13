@@ -31,12 +31,24 @@ Only `admin` and `supervisor` have UI built so far.
 
 | Role | Entry point | Access |
 |---|---|---|
-| `admin` | `/admin/dashboard` | Full management of states, cities, sites, work types, workers |
+| `admin` | `/admin/dashboard` | Full management of states, cities, sites, work types, workers; manage other admins + supervisors at `/admin/admins` and `/admin/supervisors` |
 | `supervisor` | `/supervisor/dashboard` | Assigned sites + submit/resubmit workers |
+
+**Admins vs supervisors at the data layer:** supervisors are created with an `employees` row (profile: phone/salary/city/site assignments). **Admins have NO `employees` row** — they exist only as a `users` row with `role='admin'` (seed + `create-admin.ts` never insert an employee). The Admins module (`actions/admins.ts`) therefore manages admins purely at the `users` level (name/email/status/password). `/settings` falls back to `session.user.name` when no employee row exists.
+
+**Admin-management guards** (in `actions/admins.ts`): an admin can never act on their **own** account (edit/reset/deactivate/remove are blocked — use `/settings`), and you cannot deactivate or remove the **last active admin** (prevents lockout).
+
+**Session lifetime:** hard 2-hour cap — `auth.ts` sets `session.expiresIn = 7200` with `updateAge = 7200` (equal, so no sliding renewal). Re-login required after 2h. Existing sessions keep their original expiry until they age out.
 
 **Seed credentials:**
 - Admin: `admin@anuranjan.com` / `Admin@1234`
 - Supervisor: `supervisor@anuranjan.com` / `Supervisor@1234`
+- Admin (via `create-admin.ts`): login id `ANURANJAN` / `AIRPL@1357` (stored as `anuranjan@anuranjan.com`)
+
+**Login id mapping:** better-auth requires a valid email at sign-in. The login form maps any
+identifier without `@` to `<id>@anuranjan.com` (lowercased) before calling `signIn.email`. So
+`ANURANJAN` resolves to `anuranjan@anuranjan.com`. Note this applies to **any** `@anuranjan.com`
+account — e.g. `supervisor` resolves to `supervisor@anuranjan.com`. Full emails pass through unchanged.
 
 ---
 
@@ -51,13 +63,16 @@ src/
 │   ├── seed.ts                   # Seeds users, work type, sample state/city/site, supervisor assignment (idempotent)
 │   ├── migrate-ot-rates.ts       # One-off: splits ot_rate into ot_rate_2hr/4hr/6hr (already run)
 │   ├── migrate-attendance.ts     # One-off: creates attendance table + enums (already run)
-│   └── migrate-attendance-windows.ts  # One-off: adds site time windows + late flags (already run)
+│   ├── migrate-attendance-windows.ts  # One-off: adds site time windows + late flags (already run)
+│   └── create-admin.ts           # One-off: creates the ANURANJAN admin (already run, idempotent)
 ├── lib/
 │   ├── auth.ts                   # better-auth server instance (exports `auth`)
 │   ├── auth-client.ts            # better-auth client (exports `authClient`)
 │   ├── utils.ts                  # shadcn `cn()` utility
 │   ├── india-geo.ts              # Static map: Indian state → major cities list
 │   ├── attendance.ts             # todayIST(), classifyDate(), derivedStatus(), isWithinWindow(), computeWageForRow()
+│   ├── payroll.ts                # computeRowWage(), month helpers (getMonthBounds/toYearMonth/formatYearMonth/
+│   │                             # isCurrentMonth/getMonthRange), formatINR(), payroll aggregation types
 │   ├── aadhaar.ts                # Server-only: AES-256-GCM encrypt/decrypt + re-exports from aadhaar-validate
 │   └── aadhaar-validate.ts       # Client-safe: Verhoeff checksum (validateAadhaar), maskAadhaar
 ├── middleware.ts                 # Optimistic session cookie check, redirects to /login
@@ -71,26 +86,35 @@ src/
 │   │                             # updateSiteAttendanceWindows
 │   ├── supervisors.ts            # createSupervisor, getAllSupervisors, updateSupervisor,
 │   │                             # deactivateSupervisor, reactivateSupervisor
+│   ├── admins.ts                 # getAllAdmins (+live session count), createAdmin, updateAdmin (name),
+│   │                             # deactivate/reactivateAdmin, resetAdminPassword, removeAdmin.
+│   │                             # Users-level (admins have NO employee row); guards: no self-action,
+│   │                             # cannot deactivate/remove the last active admin
 │   ├── workers.ts                # createWorkerAsAdmin, submitWorkerAsSupervisor, getAllWorkers,
 │   │                             # getWorkersForSupervisor, approveWorker, rejectWorker,
 │   │                             # resubmitWorker, updateWorker, deleteWorker,
 │   │                             # revealAadhaar, reassignWorkerCity
 │   ├── profile.ts                # updateOwnProfile, changeOwnPassword, resetSupervisorPassword
 │   │                             # (via auth.$context password hasher), removeSupervisor (hard delete)
-│   └── attendance.ts             # getWorkersForAttendance, markMorningAttendance, markEveningAttendance,
-│                                 # submitAttendanceEditRequest, resolveAttendanceEditRequest,
-│                                 # adminEditAttendance, getAttendanceForAdmin,
-│                                 # getAttendanceForSupervisor, getPendingEditRequests
+│   ├── attendance.ts             # getWorkersForAttendance, markMorningAttendance, markEveningAttendance,
+│   │                             # submitAttendanceEditRequest, resolveAttendanceEditRequest,
+│   │                             # adminEditAttendance, getAttendanceForAdmin,
+│   │                             # getAttendanceForSupervisor, getPendingEditRequests
+│   └── payroll.ts                # getDashboardSummary, getConsolidatedPayroll, getSitePayrollOverview,
+│                                 # getWorkerLifetimeEarnings, getPayrollFilterOptions (all admin-only)
 ├── components/
 │   ├── AppSidebar.tsx            # Collapsible sidebar shell (desktop tree + mobile bar, theme + logout); nav configs feed in
-│   ├── AdminNav.tsx              # Admin nav config → AppSidebar (groups Cities/Sites/Work Types under "Site Management")
+│   ├── AdminNav.tsx              # Admin nav config → AppSidebar. Groups: "Site Management" (Cities/Sites/Work Types)
+│   │                             # and "Users" (Admins/Supervisors). Workers is its own top-level item (not a login user)
 │   ├── SupervisorNav.tsx         # Supervisor nav config → AppSidebar
 │   ├── ThemeProvider.tsx         # Light/dark theme context (useTheme)
 │   ├── ThemeToggle.tsx           # Standalone theme toggle button (mobile headers)
 │   └── ui/                       # shadcn components (base-nova style)
 └── app/
+    ├── layout.tsx                # Root layout: fonts, ThemeProvider, metadata (title/description)
+    ├── icon.png / apple-icon.png / favicon.ico  # Branded favicon (file-convention; auto-linked by Next)
     ├── page.tsx                  # Redirects to /login
-    ├── login/page.tsx            # Email/password login
+    ├── login/page.tsx            # Email/password login; a bare id (no "@") maps to <id>@anuranjan.com
     ├── api/auth/[...all]/route.ts  # better-auth catch-all handler (GET + POST)
     ├── settings/                 # Shared (admin + supervisor)
     │   ├── layout.tsx            # Role-aware: renders AdminNav or SupervisorNav for the session
@@ -99,7 +123,7 @@ src/
     │   └── ChangePasswordForm.tsx  # Change own password (current → new + confirm)
     ├── admin/
     │   ├── layout.tsx            # Auth check + header + AdminNav (shared for all admin pages)
-    │   ├── dashboard/page.tsx    # Pending attendance edit request count card
+    │   ├── dashboard/page.tsx    # Four payroll summary cards (wage cost, active workers, top site, pending edits)
     │   ├── cities/
     │   │   ├── page.tsx          # Server: fetches cities + states
     │   │   └── CitiesClient.tsx  # Two-section UI: States table + Cities table
@@ -116,6 +140,14 @@ src/
     │   │   ├── EditTimeWindowsDialog.tsx  # Edit a site's morning/evening attendance windows
     │   │   ├── SiteSupervisorList.tsx  # Supervisor chips with revoke popover (used in SiteDetailDialog)
     │   │   └── [siteId]/snapshot/page.tsx
+    │   ├── admins/
+    │   │   ├── page.tsx                  # Server: getAllAdmins
+    │   │   ├── AdminsTable.tsx           # TanStack table; status filter; live session count; self-row locked
+    │   │   ├── CreateAdminDialog.tsx     # name + email + password
+    │   │   ├── EditAdminDialog.tsx       # name only (email/login not editable)
+    │   │   ├── AdminStatusDialog.tsx     # deactivate/reactivate; surfaces "last active admin" guard
+    │   │   ├── ResetAdminPasswordDialog.tsx
+    │   │   └── RemoveAdminDialog.tsx     # Permanent hard delete; type-name-to-confirm
     │   ├── supervisors/
     │   │   ├── page.tsx              # Server: fetches supervisors + active cities
     │   │   ├── SupervisorsTable.tsx  # TanStack table; status filter; Edit/Reset Password/Deactivate/Remove per row
@@ -134,13 +166,22 @@ src/
     │   │   ├── EditWorkerDialog.tsx
     │   │   ├── ReassignCityDialog.tsx
     │   │   └── AadhaarRevealButton.tsx  # 30s auto-mask, reveal logging
-    │   └── attendance/
-    │       ├── page.tsx              # Server: fetches all records + pending requests + filter data
-    │       ├── AttendanceClient.tsx  # Tabbed: Overview | Records | Edit Requests
-    │       ├── AttendanceOverview.tsx # Per-site/day coverage summary; drill-down into Records
-    │       ├── AttendanceTable.tsx   # TanStack table; site/worker/status/edited filters; late badges; inline edit
-    │       ├── EditRequestsTable.tsx # Pending requests; approve/reject with confirm dialog
-    │       └── AdminEditDialog.tsx   # Direct morning/evening/OT edit form
+    │   ├── attendance/
+    │   │   ├── page.tsx              # Server: fetches all records + pending requests + filter data
+    │   │   ├── AttendanceClient.tsx  # Tabbed: Overview | Records | Edit Requests
+    │   │   ├── AttendanceOverview.tsx # Per-site/day coverage summary; drill-down into Records
+    │   │   ├── AttendanceTable.tsx   # TanStack table; site/worker/status/edited filters; late badges; inline edit
+    │   │   ├── EditRequestsTable.tsx # Pending requests; approve/reject with confirm dialog
+    │   │   └── AdminEditDialog.tsx   # Direct morning/evening/OT edit form
+    │   └── payroll/
+    │       ├── page.tsx              # Server: filter options + initial consolidated payroll
+    │       ├── PayrollClient.tsx     # Filters + site cards; re-queries on filter change
+    │       ├── PayrollFilters.tsx    # Cascading state/city/site + independent month (native selects)
+    │       ├── SitePayrollCard.tsx   # Collapsible site → month table → per-worker breakdown
+    │       ├── MonthStatusBadge.tsx  # In Progress / Not Finalized / Finalized badge
+    │       ├── types.ts              # Shared payroll display types + CATEGORY_LABELS
+    │       ├── sites/[siteId]/       # page.tsx + SitePayrollOverview.tsx (per-site monthly view)
+    │       └── workers/[workerId]/   # page.tsx + WorkerEarningsOverview.tsx (lifetime earnings)
     └── supervisor/
         ├── layout.tsx            # Auth check + header + SupervisorNav + status guard
         ├── dashboard/page.tsx    # Shows assigned site count + pending worker submissions
@@ -191,10 +232,16 @@ All Drizzle `relations()` are declared at the **bottom** of `schema.ts` — neve
 - `workers.otRate2hr / otRate4hr / otRate6hr` — three OT rate tiers (2hr, 4hr, 6hr overtime); single `otRate` column was removed
 - `attendance` unique constraint: `(worker_id, site_id, date)` — one row per worker per site per day
 - `attendance.date` is a Drizzle `date()` column — returns a `'YYYY-MM-DD'` string, always compare as strings
-- `attendance.wageDailySnapshot / otRateSnapshot` — snapshotted from worker at first mark time, never updated after
-- `attendance.isLocked` — set by Module 1.4 payroll; blocks all edits once true
+- `attendance.wageDailySnapshot / otRateSnapshot` — snapshotted from worker at first mark time, never updated after. `otRateSnapshot` is snapshotted from `worker.otRate2hr` (the flat 2-hour-session rate)
+- `attendance.isLocked` — scaffolded for Module 1.5 finalization; blocks all edits once true. **Module 1.4 never sets it** (1.4 payroll is read-only — no finalization, no locking)
 - `sites.morningAttendanceStart/End` + `eveningAttendanceStart/End` — nullable `HH:MM` strings; null = no time restriction
 - `attendance.isMorningLate/isEveningLate` — set at mark time via `isWithinWindow()` in `lib/attendance.ts`
+
+**⚠️ Two divergent OT wage formulas exist — reconcile before relying on either:**
+- `lib/attendance.ts` `computeWageForRow()` — treats `otRateSnapshot` as a per-hour rate: 2hr → `otRate × 2`, 4hr → `otRate × 4`
+- `lib/payroll.ts` `computeRowWage()` (Module 1.4, per spec) — treats it as a flat session rate: 2hr → `otRate`, 4hr → `otRate × 2`
+
+Since `otRateSnapshot` snapshots `worker.otRate2hr` (a flat 2hr-session rate), the payroll formula is the intended reading, but payroll figures will NOT match `computeWageForRow`. Likely fix: align `computeWageForRow` to the payroll formula.
 
 **Worker business rules:**
 - Aadhaar is required (not optional) and validated with Verhoeff checksum
@@ -340,15 +387,17 @@ Receives `(checked: boolean, event: Event)` — not just `boolean`.
 | 1.2.5 Worker improvements | ✅ Done | Full CRUD (edit/delete), WorkerDetailDialog, 3-tier OT rates, Aadhaar required+Verhoeff, age 18-45, phone uniqueness, work type edit/delete, loading skeletons, PopoverTrigger fix |
 | 1.3 Attendance | ✅ Done | attendance table, morning/evening marking, OT, yesterday edit, 2-7 day edit requests with admin approval, split-shift dimming, admin full table + edit requests tab, dashboard count card |
 | 1.3-pre Profile/Windows/Fix | ✅ Done | Shared `/settings` (own profile + password change); admin reset supervisor password + permanent remove; site attendance time windows (morning/evening HH:MM) with late flags on marks + late badge + supervisor warning toast; workers table defaults to all statuses |
+| 1.4 Payroll Dashboard | ✅ Done | Read-only live wage view: dashboard summary cards, consolidated payroll with cascading state/city/site/month filters, per-site overview, per-worker lifetime earnings, "In Progress/Not Finalized/Finalized" month badges; all computed in JS via `lib/payroll.ts`; "View Payroll"/"View Earnings" links on sites/workers tables |
+| 1.4-post Admin mgmt & polish | ✅ Done | Admin management at `/admin/admins` (create/edit-name/reset-password/deactivate/reactivate/remove) with self-action + last-active-admin guards; sidebar "Users" group (Admins + Supervisors), Workers kept separate; 2-hour hard session cap in `auth.ts`; branded favicon (optimized `icon.png`/`apple-icon.png`/`favicon.ico` in `app/`) |
 
 Full specs in `docs/modules/`.
 
 ## Modules planned (not started)
 
-- 1.4 Wages
-- 1.5 Materials
-- 1.6 Expenses
-- 1.7 Reports
+- 1.5 Payroll Finalization
+- 1.6 Materials
+- 1.7 Expenses
+- 1.8 Reports
 
 ---
 
@@ -364,6 +413,7 @@ pnpm seed                 # Run src/db/seed.ts
 pnpm exec tsx src/db/migrate-ot-rates.ts      # Already run — splits ot_rate into 3 tiers
 pnpm exec tsx src/db/migrate-attendance.ts   # Already run — creates attendance table + enums
 pnpm exec tsx src/db/migrate-attendance-windows.ts  # Already run — adds site time windows + late flags
+pnpm exec tsx src/db/create-admin.ts          # Already run — creates ANURANJAN admin (idempotent)
 ```
 
 **Always run `pnpm tsc --noEmit` and `pnpm lint` before finishing any task.**

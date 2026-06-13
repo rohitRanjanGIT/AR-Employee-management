@@ -118,6 +118,9 @@ export function SitesTable({
               <Button size="sm" variant="outline" onClick={() => setDetailTarget(site)}>
                 View Details
               </Button>
+              <Link href={`/admin/payroll/sites/${site.id}`}>
+                <Button size="sm" variant="outline">View Payroll</Button>
+              </Link>
               {site.status === 'active' && (
                 <>
                   <Button size="sm" variant="outline" onClick={() => setAssignTarget(site)}>

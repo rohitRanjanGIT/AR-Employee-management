@@ -6,9 +6,12 @@ import {
   CalendarDays,
   Gauge,
   HardHat,
+  IndianRupee,
   Layers,
   MapPinned,
   Settings,
+  ShieldCheck,
+  Users,
   UserRoundCog,
 } from 'lucide-react'
 import { AppSidebar, type NavEntry } from '@/components/AppSidebar'
@@ -24,9 +27,17 @@ const navItems: NavEntry[] = [
       { label: 'Work Types', href: '/admin/work-types', icon: BriefcaseBusiness },
     ],
   },
-  { label: 'Supervisors', href: '/admin/supervisors', icon: UserRoundCog },
+  {
+    label: 'Users',
+    icon: Users,
+    children: [
+      { label: 'Admins', href: '/admin/admins', icon: ShieldCheck },
+      { label: 'Supervisors', href: '/admin/supervisors', icon: UserRoundCog },
+    ],
+  },
   { label: 'Workers', href: '/admin/workers', icon: HardHat },
   { label: 'Attendance', href: '/admin/attendance', icon: CalendarDays },
+  { label: 'Payroll', href: '/admin/payroll', icon: IndianRupee },
   { label: 'Settings', href: '/settings', icon: Settings },
 ]
 

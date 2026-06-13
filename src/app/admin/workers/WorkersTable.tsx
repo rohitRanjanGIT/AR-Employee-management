@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import {
   useReactTable,
   getCoreRowModel,
@@ -143,6 +144,13 @@ export function WorkersTable({ workers, cities }: { workers: Worker[]; cities: C
               <Button variant="outline" size="sm" onClick={() => setDetailTarget(w)}>
                 View
               </Button>
+              {w.status === 'active' && (
+                <Link href={`/admin/payroll/workers/${w.id}`}>
+                  <Button variant="outline" size="sm">
+                    View Earnings
+                  </Button>
+                </Link>
+              )}
               {w.status === 'pending' && (
                 <>
                   <Button variant="outline" size="sm" onClick={() => setApproveTarget(w)}>

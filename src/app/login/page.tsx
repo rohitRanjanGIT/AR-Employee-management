@@ -14,9 +14,16 @@ import { Label } from '@/components/ui/label'
 import { ThemeToggle } from '@/components/ThemeToggle'
 
 const loginSchema = z.object({
-  email: z.email('Invalid email address'),
+  email: z.string().min(1, 'Email or ID is required'),
   password: z.string().min(1, 'Password is required'),
 })
+
+// A bare login id (no "@") is mapped to the company domain, so users can sign in
+// with just "ANURANJAN". Full emails are passed through unchanged.
+function resolveLoginEmail(identifier: string): string {
+  const id = identifier.trim()
+  return id.includes('@') ? id : `${id.toLowerCase()}@anuranjan.com`
+}
 
 type LoginForm = z.infer<typeof loginSchema>
 
@@ -78,7 +85,7 @@ export default function LoginPage() {
   async function onSubmit(data: LoginForm) {
     setError(null)
     const result = await authClient.signIn.email({
-      email: data.email,
+      email: resolveLoginEmail(data.email),
       password: data.password,
     })
 
@@ -142,18 +149,18 @@ export default function LoginPage() {
                   Sign in
                 </h2>
                 <p className="text-sm leading-6 text-muted-foreground">
-                  Enter your email and password to continue.
+                  Enter your email or ID and password to continue.
                 </p>
               </div>
 
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                   <div className="space-y-1.5">
-                    <Label htmlFor="email">Email</Label>
+                    <Label htmlFor="email">Email or ID</Label>
                     <Input
                       id="email"
-                      type="email"
-                      placeholder="you@example.com"
-                      autoComplete="email"
+                      type="text"
+                      placeholder="you@example.com or ID"
+                      autoComplete="username"
                       {...register('email')}
                     />
                     {errors.email && (
