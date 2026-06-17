@@ -1,5 +1,7 @@
 'use client'
 
+import Link from 'next/link'
+import { UserPlus, Clock, Ban, Trash2, Camera } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
@@ -54,10 +56,18 @@ export function SiteDetailDialog({
   site,
   open,
   onOpenChange,
+  onAssign,
+  onEditWindows,
+  onDeactivate,
+  onDelete,
 }: {
   site: Site | null
   open: boolean
   onOpenChange: (open: boolean) => void
+  onAssign: () => void
+  onEditWindows: () => void
+  onDeactivate: () => void
+  onDelete: () => void
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -111,8 +121,52 @@ export function SiteDetailDialog({
           </div>
         )}
 
-        <DialogFooter className="mt-2">
-          <DialogClose render={<Button variant="outline" type="button" />}>Close</DialogClose>
+        <DialogFooter className="flex-wrap gap-2 mt-2">
+          {site && (
+            <div className="flex flex-1 flex-wrap gap-2">
+              {site.status === 'active' ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { onAssign(); onOpenChange(false) }}
+                  >
+                    <UserPlus /> Assign
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { onEditWindows(); onOpenChange(false) }}
+                  >
+                    <Clock /> Edit Time Windows
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => { onDeactivate(); onOpenChange(false) }}
+                  >
+                    <Ban /> Deactivate
+                  </Button>
+                </>
+              ) : (
+                <Link href={`/admin/sites/${site.id}/snapshot`}>
+                  <Button variant="outline" size="sm">
+                    <Camera /> View Snapshot
+                  </Button>
+                </Link>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => { onDelete(); onOpenChange(false) }}
+              >
+                <Trash2 /> Delete
+              </Button>
+            </div>
+          )}
+          <DialogClose render={<Button variant="outline" size="sm" type="button" />}>Close</DialogClose>
         </DialogFooter>
       </DialogContent>
     </Dialog>

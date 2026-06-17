@@ -15,7 +15,7 @@ import { relations } from 'drizzle-orm'
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
 export const roleEnum = pgEnum('role', ['admin', 'supervisor', 'accounts', 'sales'])
-export const workerStatusEnum = pgEnum('worker_status', ['pending', 'active', 'rejected'])
+export const workerStatusEnum = pgEnum('worker_status', ['pending', 'active', 'rejected', 'archived'])
 export const workerCategoryEnum = pgEnum('worker_category', ['skilled', 'semi_skilled', 'helper'])
 export const siteStatusEnum = pgEnum('site_status', ['active', 'inactive'])
 export const otEnum = pgEnum('ot_type', ['none', '2hr', '4hr'])

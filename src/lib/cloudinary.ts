@@ -29,7 +29,7 @@ const FOLDERS = {
 
 export type PhotoFolder = keyof typeof FOLDERS
 
-const MAX_BYTES = 8 * 1024 * 1024 // 8 MB server-side guard
+const MAX_BYTES = 2 * 1024 * 1024 // 2 MB server-side guard
 const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
 
 /**
@@ -42,7 +42,7 @@ export async function uploadImage(file: File, folder: PhotoFolder): Promise<Uplo
     throw new Error('Unsupported image type. Use JPG, PNG, WEBP or HEIC.')
   }
   if (file.size > MAX_BYTES) {
-    throw new Error('Image is too large. Maximum size is 8 MB.')
+    throw new Error('Image is too large. Maximum size is 2 MB.')
   }
 
   const bytes = Buffer.from(await file.arrayBuffer())

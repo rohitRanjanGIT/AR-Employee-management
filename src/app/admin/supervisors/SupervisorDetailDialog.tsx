@@ -12,6 +12,7 @@ import {
 import { Avatar } from '@/components/Avatar'
 import { computeAge } from '@/lib/age'
 import { formatDate } from '@/lib/utils'
+import { SquarePen, KeyRound, Ban, RotateCcw, Trash2 } from 'lucide-react'
 
 type City = { id: string; name: string }
 type AssignedSite = { siteId: string; siteName: string; siteCode: string; cityName: string }
@@ -49,10 +50,18 @@ export function SupervisorDetailDialog({
   supervisor,
   open,
   onOpenChange,
+  onEdit,
+  onResetPassword,
+  onStatusChange,
+  onRemove,
 }: {
   supervisor: Supervisor | null
   open: boolean
   onOpenChange: (open: boolean) => void
+  onEdit: () => void
+  onResetPassword: () => void
+  onStatusChange: () => void
+  onRemove: () => void
 }) {
   if (!supervisor) return null
 
@@ -75,10 +84,13 @@ export function SupervisorDetailDialog({
           <Row label="Email" value={supervisor.email} />
           <Row label="Phone" value={supervisor.phone} />
           <Row
-            label="Date of Birth"
-            value={supervisor.dateOfBirth ? formatDate(supervisor.dateOfBirth) : null}
+            label="Age"
+            value={
+              supervisor.dateOfBirth
+                ? `${computeAge(supervisor.dateOfBirth)} - ${formatDate(supervisor.dateOfBirth)}`
+                : '-'
+            }
           />
-          <Row label="Age" value={computeAge(supervisor.dateOfBirth)} />
           <Row label="Home City" value={supervisor.homeCity?.name} />
           <Row label="Monthly Salary" value={fmtMoney(supervisor.salaryMonthly)} />
           <Row
@@ -108,7 +120,49 @@ export function SupervisorDetailDialog({
           )}
         </div>
 
-        <DialogFooter className="mt-2">
+        <DialogFooter className="flex-wrap gap-2 mt-2">
+          <div className="flex flex-1 flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { onEdit(); onOpenChange(false) }}
+            >
+              <SquarePen /> Edit
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { onResetPassword(); onOpenChange(false) }}
+            >
+              <KeyRound /> Reset Password
+            </Button>
+            {supervisor.status === 'active' ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => { onStatusChange(); onOpenChange(false) }}
+              >
+                <Ban /> Deactivate
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { onStatusChange(); onOpenChange(false) }}
+              >
+                <RotateCcw /> Reactivate
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={() => { onRemove(); onOpenChange(false) }}
+            >
+              <Trash2 /> Remove
+            </Button>
+          </div>
           <DialogClose render={<Button variant="outline" size="sm" type="button" />}>
             Close
           </DialogClose>

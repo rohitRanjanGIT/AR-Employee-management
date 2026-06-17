@@ -24,7 +24,7 @@ type Worker = {
   otRate6hr: string | null
   aadhaarLastFour: string | null
   aadhaarDisplay: string | null
-  status: 'pending' | 'active' | 'rejected'
+  status: 'pending' | 'active' | 'rejected' | 'archived'
   rejectionReason: string | null
   resubmitted: boolean
   cityId: string
@@ -66,6 +66,7 @@ function fmt(v: string | null) {
 function StatusBadge({ status }: { status: Worker['status'] }) {
   if (status === 'active') return <Badge variant="default">Active</Badge>
   if (status === 'pending') return <Badge variant="outline">Pending</Badge>
+  if (status === 'archived') return <Badge variant="secondary">Archived</Badge>
   return <Badge variant="destructive">Rejected</Badge>
 }
 
@@ -77,6 +78,8 @@ export function WorkerDetailDialog({
   onReject,
   onEdit,
   onDelete,
+  onArchive,
+  onRestore,
 }: {
   worker: Worker | null
   open: boolean
@@ -85,6 +88,8 @@ export function WorkerDetailDialog({
   onReject: (w: Worker) => void
   onEdit: (w: Worker) => void
   onDelete: (w: Worker) => void
+  onArchive: (w: Worker) => void
+  onRestore: (w: Worker) => void
 }) {
   if (!worker) return null
 
@@ -147,7 +152,7 @@ export function WorkerDetailDialog({
         )}
 
         <DialogFooter className="flex-wrap gap-2 mt-2">
-          <div className="flex gap-2 flex-1">
+          <div className="flex gap-2 flex-1 flex-wrap">
             <Button
               variant="outline"
               size="sm"
@@ -155,6 +160,24 @@ export function WorkerDetailDialog({
             >
               Edit
             </Button>
+            {worker.status === 'active' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { onArchive(worker); onOpenChange(false) }}
+              >
+                Archive
+              </Button>
+            )}
+            {worker.status === 'archived' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { onRestore(worker); onOpenChange(false) }}
+              >
+                Restore
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"

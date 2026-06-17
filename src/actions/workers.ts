@@ -398,7 +398,46 @@ export async function updateWorker(workerId: string, input: z.infer<typeof updat
   revalidatePath('/admin/workers')
 }
 
-// ─── Delete Worker (Admin) ────────────────────────────────────────────────────
+// ─── Archive / Restore Worker (Admin) ─────────────────────────────────────────
+// Archiving is a soft delete: the worker is hidden from active lists, attendance
+// marking and supervisor views (all of which filter status='active'), but every
+// record is preserved and the action is reversible via restoreWorker.
+
+export async function archiveWorker(workerId: string) {
+  await requireAdmin()
+
+  const worker = await db.query.workers.findFirst({ where: eq(workers.id, workerId) })
+  if (!worker) throw new Error('Worker not found')
+  if (worker.status === 'archived') throw new Error('Worker is already archived')
+
+  await db
+    .update(workers)
+    .set({ status: 'archived', updatedAt: new Date() })
+    .where(eq(workers.id, workerId))
+
+  revalidatePath('/admin/workers')
+}
+
+export async function restoreWorker(workerId: string) {
+  await requireAdmin()
+
+  const worker = await db.query.workers.findFirst({ where: eq(workers.id, workerId) })
+  if (!worker) throw new Error('Worker not found')
+  if (worker.status !== 'archived') throw new Error('Worker is not archived')
+
+  await db
+    .update(workers)
+    .set({ status: 'active', updatedAt: new Date() })
+    .where(eq(workers.id, workerId))
+
+  revalidatePath('/admin/workers')
+}
+
+// ─── Delete Worker (Admin, permanent cascade) ─────────────────────────────────
+// Permanently removes the worker AND all their attendance records (attendance
+// references workers.id without an onDelete cascade, so it is deleted manually).
+// Workers WITH attendance must be archived first — this prevents wiping payroll
+// history by accident. Workers with no attendance can be deleted directly.
 
 export async function deleteWorker(workerId: string) {
   await requireAdmin()
@@ -409,8 +448,12 @@ export async function deleteWorker(workerId: string) {
   const hasAttendance = await db.query.attendance.findFirst({
     where: eq(attendance.workerId, workerId),
   })
-  if (hasAttendance) throw new Error('Cannot delete worker with attendance records')
+  if (hasAttendance && worker.status !== 'archived') {
+    throw new Error('Archive this worker before permanently deleting — they have attendance records')
+  }
 
+  // Remove non-cascading attendance rows first, then the worker.
+  await db.delete(attendance).where(eq(attendance.workerId, workerId))
   await db.delete(workers).where(eq(workers.id, workerId))
   await deleteImage(worker.photoCloudinaryPublicId)
   revalidatePath('/admin/workers')

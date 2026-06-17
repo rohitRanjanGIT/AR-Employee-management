@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Avatar } from '@/components/Avatar'
 
 const ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/heif'
-const MAX_BYTES = 8 * 1024 * 1024 // 8 MB
+const MAX_BYTES = 2 * 1024 * 1024 // 2 MB
 
 /**
  * Resolves the photo fields to send to a create/update action at submit time.
@@ -72,7 +72,7 @@ export function PhotoUpload({
       return
     }
     if (file.size > MAX_BYTES) {
-      setError('Image must be 8 MB or smaller.')
+      setError('Image must be 2 MB or smaller.')
       return
     }
     setPreview(URL.createObjectURL(file))
@@ -132,7 +132,7 @@ export function PhotoUpload({
           )}
         </div>
       </div>
-      <p className="text-xs text-muted-foreground">Optional. JPG, PNG, WEBP or HEIC, up to 8 MB.</p>
+      <p className="text-xs text-muted-foreground">Optional. JPG, PNG, WEBP or HEIC, up to 2 MB.</p>
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   )

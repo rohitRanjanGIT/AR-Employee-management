@@ -9,6 +9,7 @@ import {
   flexRender,
   createColumnHelper,
 } from '@tanstack/react-table'
+import { Eye, IndianRupee } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -22,6 +23,7 @@ import {
 import { CreateSiteDialog } from './CreateSiteDialog'
 import { AssignSupervisorDialog } from './AssignSupervisorDialog'
 import { DeactivateSiteDialog } from './DeactivateSiteDialog'
+import { DeleteSiteDialog } from './DeleteSiteDialog'
 import { EditTimeWindowsDialog } from './EditTimeWindowsDialog'
 import { SiteDetailDialog } from './SiteDetailDialog'
 
@@ -64,6 +66,7 @@ export function SitesTable({
   const [statusFilter, setStatusFilter] = useState('all')
   const [assignTarget, setAssignTarget] = useState<Site | null>(null)
   const [deactivateTarget, setDeactivateTarget] = useState<Site | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Site | null>(null)
   const [windowsTarget, setWindowsTarget] = useState<Site | null>(null)
   const [detailTarget, setDetailTarget] = useState<Site | null>(null)
 
@@ -114,31 +117,21 @@ export function SitesTable({
         cell: ({ row }) => {
           const site = row.original
           return (
-            <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="outline" onClick={() => setDetailTarget(site)}>
-                View Details
+            <div className="flex items-center gap-0.5">
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                title="View details"
+                aria-label="View details"
+                onClick={() => setDetailTarget(site)}
+              >
+                <Eye />
               </Button>
               <Link href={`/admin/payroll/sites/${site.id}`}>
-                <Button size="sm" variant="outline">View Payroll</Button>
+                <Button size="icon-sm" variant="ghost" title="View payroll" aria-label="View payroll">
+                  <IndianRupee />
+                </Button>
               </Link>
-              {site.status === 'active' && (
-                <>
-                  <Button size="sm" variant="outline" onClick={() => setAssignTarget(site)}>
-                    Assign
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setWindowsTarget(site)}>
-                    Edit Time Windows
-                  </Button>
-                  <Button size="sm" variant="destructive" onClick={() => setDeactivateTarget(site)}>
-                    Deactivate
-                  </Button>
-                </>
-              )}
-              {site.status === 'inactive' && (
-                <Link href={`/admin/sites/${site.id}/snapshot`}>
-                  <Button size="sm" variant="outline">View Snapshot</Button>
-                </Link>
-              )}
             </div>
           )
         },
@@ -230,6 +223,11 @@ export function SitesTable({
         open={!!deactivateTarget}
         onOpenChange={(o) => { if (!o) setDeactivateTarget(null) }}
       />
+      <DeleteSiteDialog
+        site={deleteTarget}
+        open={!!deleteTarget}
+        onOpenChange={(o) => { if (!o) setDeleteTarget(null) }}
+      />
       <EditTimeWindowsDialog
         site={windowsTarget}
         open={!!windowsTarget}
@@ -239,6 +237,10 @@ export function SitesTable({
         site={detailTarget}
         open={!!detailTarget}
         onOpenChange={(o) => { if (!o) setDetailTarget(null) }}
+        onAssign={() => { if (detailTarget) setAssignTarget(detailTarget) }}
+        onEditWindows={() => { if (detailTarget) setWindowsTarget(detailTarget) }}
+        onDeactivate={() => { if (detailTarget) setDeactivateTarget(detailTarget) }}
+        onDelete={() => { if (detailTarget) setDeleteTarget(detailTarget) }}
       />
     </div>
   )

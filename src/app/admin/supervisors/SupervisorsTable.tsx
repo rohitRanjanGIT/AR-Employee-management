@@ -25,7 +25,7 @@ import {
   SelectTrigger,
 } from '@/components/ui/select'
 import { Avatar } from '@/components/Avatar'
-import { computeAge } from '@/lib/age'
+import { Eye, SquarePen } from 'lucide-react'
 import { CreateSupervisorDialog } from './CreateSupervisorDialog'
 import { EditSupervisorDialog } from './EditSupervisorDialog'
 import { DeactivateConfirmDialog } from './DeactivateConfirmDialog'
@@ -104,12 +104,6 @@ export function SupervisorsTable({
           </div>
         ),
       }),
-      col.accessor('email', { header: 'Email' }),
-      col.display({
-        id: 'age',
-        header: 'Age',
-        cell: ({ row }) => <span className="tabular-nums">{computeAge(row.original.dateOfBirth)}</span>,
-      }),
       col.accessor('phone', {
         header: 'Phone',
         cell: (info) => info.getValue() ?? <span className="text-muted-foreground">—</span>,
@@ -145,35 +139,24 @@ export function SupervisorsTable({
         cell: ({ row }) => {
           const s = row.original
           return (
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setDetailTarget(s)}>
-                View
+            <div className="flex items-center gap-0.5">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                title="View"
+                aria-label="View"
+                onClick={() => setDetailTarget(s)}
+              >
+                <Eye />
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setEditTarget(s)}>
-                Edit
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setResetTarget(s)}>
-                Reset Password
-              </Button>
-              {s.status === 'active' ? (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => setDialogTarget({ supervisor: s, mode: 'deactivate' })}
-                >
-                  Deactivate
-                </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setDialogTarget({ supervisor: s, mode: 'reactivate' })}
-                >
-                  Reactivate
-                </Button>
-              )}
-              <Button variant="destructive" size="sm" onClick={() => setRemoveTarget(s)}>
-                Remove
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                title="Edit"
+                aria-label="Edit"
+                onClick={() => setEditTarget(s)}
+              >
+                <SquarePen />
               </Button>
             </div>
           )
@@ -265,6 +248,17 @@ export function SupervisorsTable({
         supervisor={detailTarget}
         open={!!detailTarget}
         onOpenChange={(o) => { if (!o) setDetailTarget(null) }}
+        onEdit={() => { if (detailTarget) setEditTarget(detailTarget) }}
+        onResetPassword={() => { if (detailTarget) setResetTarget(detailTarget) }}
+        onStatusChange={() => {
+          if (detailTarget) {
+            setDialogTarget({
+              supervisor: detailTarget,
+              mode: detailTarget.status === 'active' ? 'deactivate' : 'reactivate',
+            })
+          }
+        }}
+        onRemove={() => { if (detailTarget) setRemoveTarget(detailTarget) }}
       />
 
       <EditSupervisorDialog

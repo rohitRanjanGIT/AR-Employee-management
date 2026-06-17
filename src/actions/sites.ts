@@ -6,6 +6,7 @@ import {
   siteWorkTypes,
   siteSupervisorAssignments,
   siteSnapshots,
+  attendance,
   employees,
   cities,
   users,
@@ -195,6 +196,27 @@ export async function deactivateSite(siteId: string) {
   await db.insert(siteSnapshots).values({ siteId: site.id, supervisors: supervisorSnapshot })
   await db.update(sites).set({ status: 'inactive' }).where(eq(sites.id, siteId))
   await db.delete(siteSupervisorAssignments).where(eq(siteSupervisorAssignments.siteId, siteId))
+
+  revalidatePath('/admin/sites')
+}
+
+// ─── Delete Site (permanent, cascades all related data) ───────────────────────
+// Hard deletes the site and everything tied to it. attendance + site_snapshots
+// reference sites.id WITHOUT an onDelete cascade, so they are removed manually
+// first; site_work_types + site_supervisor_assignments cascade on the site delete.
+
+export async function deleteSite(siteId: string) {
+  await requireAdmin()
+
+  const site = await db.query.sites.findFirst({ where: eq(sites.id, siteId) })
+  if (!site) throw new Error('Site not found')
+
+  // Non-cascading references must go first
+  await db.delete(attendance).where(eq(attendance.siteId, siteId))
+  await db.delete(siteSnapshots).where(eq(siteSnapshots.siteId, siteId))
+
+  // Cascades: site_work_types + site_supervisor_assignments
+  await db.delete(sites).where(eq(sites.id, siteId))
 
   revalidatePath('/admin/sites')
 }

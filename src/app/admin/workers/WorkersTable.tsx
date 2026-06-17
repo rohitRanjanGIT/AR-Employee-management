@@ -39,7 +39,9 @@ import { ApproveWorkerDialog } from './ApproveWorkerDialog'
 import { RejectWorkerDialog } from './RejectWorkerDialog'
 import { WorkerDetailDialog } from './WorkerDetailDialog'
 import { EditWorkerDialog } from './EditWorkerDialog'
-import { deleteWorker } from '@/actions/workers'
+import { deleteWorker, archiveWorker, restoreWorker } from '@/actions/workers'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 type City = { id: string; name: string }
 type Worker = {
@@ -52,7 +54,7 @@ type Worker = {
   otRate6hr: string | null
   aadhaarLastFour: string | null
   aadhaarDisplay: string | null
-  status: 'pending' | 'active' | 'rejected'
+  status: 'pending' | 'active' | 'rejected' | 'archived'
   rejectionReason: string | null
   resubmitted: boolean
   cityId: string
@@ -82,6 +84,7 @@ const col = createColumnHelper<Worker>()
 function StatusBadge({ status }: { status: Worker['status'] }) {
   if (status === 'active') return <Badge variant="default">Active</Badge>
   if (status === 'pending') return <Badge variant="outline">Pending</Badge>
+  if (status === 'archived') return <Badge variant="secondary">Archived</Badge>
   return <Badge variant="destructive">Rejected</Badge>
 }
 
@@ -101,12 +104,45 @@ export function WorkersTable({ workers, cities }: { workers: Worker[]; cities: C
   const [editTarget, setEditTarget] = useState<Worker | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Worker | null>(null)
   const [deleteError, setDeleteError] = useState('')
+  const [confirmText, setConfirmText] = useState('')
   const [isDeleting, startDelete] = useTransition()
+  const [, startAction] = useTransition()
+  const [toast, setToast] = useState<string | null>(null)
+
+  function showToast(msg: string) {
+    setToast(msg)
+    setTimeout(() => setToast(null), 3000)
+  }
+
+  function handleArchive(w: Worker) {
+    startAction(async () => {
+      try {
+        await archiveWorker(w.id)
+        router.refresh()
+        showToast(`${w.name} archived`)
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : 'Something went wrong')
+      }
+    })
+  }
+
+  function handleRestore(w: Worker) {
+    startAction(async () => {
+      try {
+        await restoreWorker(w.id)
+        router.refresh()
+        showToast(`${w.name} restored`)
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : 'Something went wrong')
+      }
+    })
+  }
 
   const pendingCount = useMemo(() => workers.filter((w) => w.status === 'pending').length, [workers])
 
   const filtered = useMemo(() => workers.filter((w) => {
-    if (statusFilter !== 'all' && w.status !== statusFilter) return false
+    // Archived workers are hidden everywhere except the explicit Archived filter
+    if (statusFilter === 'all' ? w.status === 'archived' : w.status !== statusFilter) return false
     if (cityFilter !== 'all' && w.city.id !== cityFilter) return false
     if (categoryFilter !== 'all' && w.category !== categoryFilter) return false
     return true
@@ -201,6 +237,7 @@ export function WorkersTable({ workers, cities }: { workers: Worker[]; cities: C
       try {
         await deleteWorker(deleteTarget.id)
         setDeleteTarget(null)
+        setConfirmText('')
         router.refresh()
       } catch (e) {
         setDeleteError(e instanceof Error ? e.message : 'Something went wrong')
@@ -210,6 +247,12 @@ export function WorkersTable({ workers, cities }: { workers: Worker[]; cities: C
 
   return (
     <div className="space-y-4">
+      {toast && (
+        <div className="fixed top-4 right-4 z-50 bg-foreground text-background px-4 py-2 rounded shadow text-sm">
+          {toast}
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-semibold">Workers</h1>
@@ -226,7 +269,7 @@ export function WorkersTable({ workers, cities }: { workers: Worker[]; cities: C
           onValueChange={(v) => {
             const val = v ?? 'all'
             setStatusFilter(val)
-            const labels: Record<string, string> = { all: 'All Status', pending: 'Pending', active: 'Active', rejected: 'Rejected' }
+            const labels: Record<string, string> = { all: 'All Status', pending: 'Pending', active: 'Active', rejected: 'Rejected', archived: 'Archived' }
             setStatusFilterName(labels[val] ?? val)
           }}
         >
@@ -238,6 +281,7 @@ export function WorkersTable({ workers, cities }: { workers: Worker[]; cities: C
             <SelectItem value="pending">Pending</SelectItem>
             <SelectItem value="active">Active</SelectItem>
             <SelectItem value="rejected">Rejected</SelectItem>
+            <SelectItem value="archived">Archived</SelectItem>
           </SelectContent>
         </Select>
 
@@ -323,6 +367,8 @@ export function WorkersTable({ workers, cities }: { workers: Worker[]; cities: C
         onReject={(w) => setRejectTarget(w)}
         onEdit={(w) => setEditTarget(w)}
         onDelete={(w) => setDeleteTarget(w)}
+        onArchive={(w) => handleArchive(w)}
+        onRestore={(w) => handleRestore(w)}
       />
       <ApproveWorkerDialog
         worker={approveTarget}
@@ -341,17 +387,37 @@ export function WorkersTable({ workers, cities }: { workers: Worker[]; cities: C
         onOpenChange={(o) => { if (!o) setEditTarget(null) }}
       />
 
-      {/* Delete confirm */}
-      <Dialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) { setDeleteTarget(null); setDeleteError('') } }}>
-        <DialogContent>
+      {/* Delete confirm — permanent cascade (worker + attendance) */}
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) { setDeleteTarget(null); setDeleteError(''); setConfirmText('') } }}>
+        <DialogContent showCloseButton={false}>
           <DialogTitle>Delete Worker</DialogTitle>
-          <p className="text-sm text-muted-foreground mt-1">
-            Permanently delete <span className="font-medium text-foreground">{deleteTarget?.name}</span>? This cannot be undone.
-          </p>
-          {deleteError && <p className="text-xs text-destructive mt-2">{deleteError}</p>}
+          <div className="space-y-4 mt-1">
+            <p className="text-sm text-muted-foreground">
+              Permanently deleting <span className="font-medium text-foreground">{deleteTarget?.name}</span> removes
+              the worker and <span className="font-medium text-foreground">all their attendance records</span>. This
+              cannot be undone. To keep records, use Archive instead.
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="worker-delete-confirm">
+                Type <span className="font-medium text-foreground">{deleteTarget?.name}</span> to confirm
+              </Label>
+              <Input
+                id="worker-delete-confirm"
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                placeholder={deleteTarget?.name}
+                autoComplete="off"
+              />
+            </div>
+            {deleteError && <p className="text-xs text-destructive">{deleteError}</p>}
+          </div>
           <DialogFooter className="mt-4">
             <DialogClose render={<Button variant="outline" type="button" disabled={isDeleting} />}>Cancel</DialogClose>
-            <Button variant="destructive" onClick={handleDeleteConfirm} disabled={isDeleting}>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteConfirm}
+              disabled={isDeleting || !deleteTarget || confirmText.trim() !== deleteTarget.name}
+            >
               {isDeleting ? 'Deleting…' : 'Delete'}
             </Button>
           </DialogFooter>

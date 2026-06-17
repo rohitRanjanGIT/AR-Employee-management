@@ -66,6 +66,7 @@ src/
 │   ├── migrate-attendance.ts     # One-off: creates attendance table + enums (already run)
 │   ├── migrate-attendance-windows.ts  # One-off: adds site time windows + late flags (already run)
 │   ├── migrate-profile-bank-dob.ts    # One-off: drops workers.age, adds DOB+bank+photo cols on workers+employees (already run)
+│   ├── migrate-worker-archived.ts     # One-off: adds 'archived' to worker_status enum (already run)
 │   └── create-admin.ts           # One-off: creates the ANURANJAN admin (already run, idempotent)
 ├── lib/
 │   ├── auth.ts                   # better-auth server instance (exports `auth`)
@@ -73,6 +74,7 @@ src/
 │   ├── utils.ts                  # shadcn `cn()` + formatDate() (DD/MM/YYYY) + formatDateTime() (DD/MM/YYYY, HH:mm)
 │   ├── age.ts                    # computeAge(dob) → display-only age string ('-' when null); age is never stored
 │   ├── cloudinary.ts             # Server-only: uploadImage(file, folder)/deleteImage(publicId) via signed SDK
+│   │                             # (2 MB max + image-type guard; same cap enforced client-side in PhotoUpload)
 │   ├── cloudinary-url.ts         # Client-safe: avatarUrl() injects f_auto/q_auto/c_fill avatar transform
 │   ├── india-geo.ts              # Static map: Indian state → major cities list
 │   ├── attendance.ts             # todayIST(), classifyDate(), derivedStatus(), isWithinWindow(), computeWageForRow()
@@ -87,7 +89,8 @@ src/
 │   ├── work-types.ts             # createWorkType, updateWorkType, deleteWorkType, getAllWorkTypes
 │   ├── sites.ts                  # createSite, getAllSites, getSupervisorSites,
 │   │                             # getSupervisorEmployees (active only), assignSupervisorToSite,
-│   │                             # revokeSupervisorFromSite, deactivateSite, getSiteSnapshot,
+│   │                             # revokeSupervisorFromSite, deactivateSite, deleteSite (permanent cascade:
+│   │                             # removes attendance + snapshots, then site), getSiteSnapshot,
 │   │                             # updateSiteAttendanceWindows
 │   ├── supervisors.ts            # createSupervisor, getAllSupervisors, updateSupervisor,
 │   │                             # deactivateSupervisor, reactivateSupervisor, uploadEmployeePhoto
@@ -98,9 +101,9 @@ src/
 │   │                             # cannot deactivate/remove the last active admin
 │   ├── workers.ts                # createWorkerAsAdmin, submitWorkerAsSupervisor, getAllWorkers,
 │   │                             # getWorkersForSupervisor, approveWorker, rejectWorker,
-│   │                             # resubmitWorker, updateWorker, deleteWorker,
-│   │                             # revealAadhaar, reassignWorkerCity, uploadWorkerPhoto.
-│   │                             # getWorkersForSupervisor STRIPS accountNumber/ifscCode (admin-only bank)
+│   │                             # resubmitWorker, updateWorker, archiveWorker, restoreWorker,
+│   │                             # deleteWorker (permanent cascade), revealAadhaar, reassignWorkerCity,
+│   │                             # uploadWorkerPhoto. getWorkersForSupervisor STRIPS accountNumber/ifscCode
 │   ├── profile.ts                # updateOwnProfile, changeOwnPassword, resetSupervisorPassword
 │   │                             # (via auth.$context password hasher), removeSupervisor (hard delete)
 │   ├── attendance.ts             # getWorkersForAttendance, markMorningAttendance, markEveningAttendance,
@@ -141,11 +144,14 @@ src/
     │   │   └── WorkTypesClient.tsx  # Create/edit/delete work types
     │   ├── sites/
     │   │   ├── page.tsx          # Server: fetches sites + supervisors + work types + cities
-    │   │   ├── SitesTable.tsx    # TanStack table (Name/Code/City/Work Types/Status); all actions in Actions column
+    │   │   ├── SitesTable.tsx    # TanStack table (Name/Code/City/Work Types/Status); row has icon actions
+    │   │   │                     # (View Details + View Payroll only) — management actions live in SiteDetailDialog
     │   │   ├── CreateSiteDialog.tsx  # Includes optional attendance time-window fields
-    │   │   ├── SiteDetailDialog.tsx  # Read view: price/cost/windows/work types/supervisors (with revoke)
+    │   │   ├── SiteDetailDialog.tsx  # Read view (price/cost/windows/work types/supervisors w/ revoke) + footer
+    │   │   │                         # actions: active→Assign/Edit Windows/Deactivate, inactive→View Snapshot, +Delete
     │   │   ├── AssignSupervisorDialog.tsx
     │   │   ├── DeactivateSiteDialog.tsx
+    │   │   ├── DeleteSiteDialog.tsx  # Permanent cascade delete; type-site-name-to-confirm
     │   │   ├── EditTimeWindowsDialog.tsx  # Edit a site's morning/evening attendance windows
     │   │   ├── SiteSupervisorList.tsx  # Supervisor chips with revoke popover (used in SiteDetailDialog)
     │   │   └── [siteId]/snapshot/page.tsx
@@ -159,8 +165,10 @@ src/
     │   │   └── RemoveAdminDialog.tsx     # Permanent hard delete; type-name-to-confirm
     │   ├── supervisors/
     │   │   ├── page.tsx              # Server: fetches supervisors + active cities
-    │   │   ├── SupervisorsTable.tsx  # TanStack table; avatar + Age cols; View/Edit/Reset Password/Deactivate/Remove per row
-    │   │   ├── SupervisorDetailDialog.tsx  # Read view: avatar/DOB/age/salary/sites + admin-only bank block
+    │   │   ├── SupervisorsTable.tsx  # TanStack table; avatar col (no Age/Email cols); row has View + Edit icon
+    │   │   │                          # actions only — Reset Password/Deactivate/Remove live in SupervisorDetailDialog
+    │   │   ├── SupervisorDetailDialog.tsx  # Read view: avatar/clubbed Age-DOB/salary/sites + admin-only bank block;
+    │   │   │                               # footer actions: Edit/Reset Password/Deactivate(Reactivate)/Remove
     │   │   ├── CreateSupervisorDialog.tsx  # + DOB, photo, bank (admin)
     │   │   ├── EditSupervisorDialog.tsx    # + DOB, photo, bank (admin)
     │   │   ├── DeactivateConfirmDialog.tsx  # handles both deactivate + reactivate
@@ -168,8 +176,10 @@ src/
     │   │   └── RemoveSupervisorDialog.tsx   # Permanent hard delete; type-name-to-confirm
     │   ├── workers/
     │   │   ├── page.tsx              # Server: fetches workers + active cities
-    │   │   ├── WorkersTable.tsx      # TanStack table; avatar + Age cols; View/Approve/Reject per row
-    │   │   ├── WorkerDetailDialog.tsx  # View all fields (avatar/DOB/age + bank block); Approve/Reject/Edit/Delete
+    │   │   ├── WorkersTable.tsx      # TanStack table; avatar + Age cols; status filter incl. Archived (the "All"
+    │   │   │                         # filter EXCLUDES archived — they show only under the Archived filter)
+    │   │   ├── WorkerDetailDialog.tsx  # View all fields (avatar/DOB/age + bank block); Approve/Reject/Edit/
+    │   │   │                           # Archive (active) / Restore (archived) / Delete (permanent, type-to-confirm)
     │   │   ├── CreateWorkerDialog.tsx
     │   │   ├── ApproveWorkerDialog.tsx
     │   │   ├── RejectWorkerDialog.tsx
@@ -241,6 +251,7 @@ All Drizzle `relations()` are declared at the **bottom** of `schema.ts` — neve
 - `cities.stateId` is NOT NULL — state is required when creating a city
 - `cities.status` and `sites.status` use `text` enum: `'active' | 'inactive'`
 - `site_snapshots.supervisors` is JSONB — captures supervisor list at deactivation time
+- **Deleting a site** (`deleteSite`) is a permanent cascade: `attendance` and `site_snapshots` reference `sites.id` WITHOUT an onDelete cascade so they are deleted manually first; `site_work_types` + `site_supervisor_assignments` cascade on the site delete. Deactivate (snapshot + status flip) remains the audit-trail path
 - `employees.userId` links an employee record to a better-auth user (1:1, unique)
 - `workers` are separate from `employees` — employees are company staff (supervisors etc.), workers are site labour
 - `workers.aadhaarEncrypted` is NEVER returned to the client — always stripped with destructuring before returning
@@ -266,6 +277,7 @@ Since `otRateSnapshot` snapshots `worker.otRate2hr` (a flat 2hr-session rate), t
 - Date of birth is optional; age is computed for display only (no 18–45 constraint since 1.2.5 — the old `age` field + range check were removed)
 - Phone must be unique across all workers and employees
 - Workers created by admin start as `active`; submitted by supervisor start as `pending`
+- `worker_status` enum is `pending | active | rejected | archived`. **Archive** is a reversible soft delete (status→`archived`) that hides the worker from active lists, attendance marking and supervisor views (all filter `status='active'`) while preserving every record. **deleteWorker** is a permanent cascade (worker + all their attendance rows, which have no FK cascade): a worker WITH attendance must be archived first; one with no attendance can be deleted directly. Past payroll is unaffected by archiving (it reads attendance rows)
 - `aadhaarEncrypted` is stripped from all query results before returning to client
 - Admin reveal is logged to `aadhaarRevealLogs` JSONB and auto-hides after 30s in UI
 
@@ -414,6 +426,7 @@ Receives `(checked: boolean, event: Event)` — not just `boolean`.
 | 1.4 Payroll Dashboard | ✅ Done | Read-only live wage view: dashboard summary cards, consolidated payroll with cascading state/city/site/month filters, per-site overview, per-worker lifetime earnings, "In Progress/Not Finalized/Finalized" month badges; all computed in JS via `lib/payroll.ts`; "View Payroll"/"View Earnings" links on sites/workers tables |
 | 1.4-post Admin mgmt & polish | ✅ Done | Admin management at `/admin/admins` (create/edit-name/reset-password/deactivate/reactivate/remove) with self-action + last-active-admin guards; sidebar "Users" group (Admins + Supervisors), Workers kept separate; 2-hour hard session cap in `auth.ts`; branded favicon (optimized `icon.png`/`apple-icon.png`/`favicon.ico` in `app/`) |
 | 1.4-post Attendance Records redesign | ✅ Done | Admin Records reworked into a per-site-per-day ledger (one row per site/day: recorded-by supervisors tagged by session, worker/full-half/OT tallies, **Day Pay** via `lib/payroll` `computeRowWage`); shared `DayDetail` expand-in-place per-worker table reused by Records + Overview site-wise; single `AdminEditDialog` lifted to `AttendanceClient` (one `onEdit` for both tabs); Day Pay column added to Overview site-wise; site-wide date display standardized to DD/MM/YYYY via `formatDate`/`formatDateTime`. (Day Pay OT portion still inherits the `otRateSnapshot=2hr` quirk — see OT-formula note above) |
+| 1.4-post UX: archive/delete + action bars | ✅ Done | Worker **archive/restore** (soft delete, `archived` status) + permanent cascade **deleteWorker** (worker + attendance, type-to-confirm; archive required first when attendance exists); archived hidden from active/supervisor/attendance views and from the "All" worker filter. Site **deleteSite** (permanent cascade) + `DeleteSiteDialog`. Action-bar redesign on supervisors + sites tables: compact icon row for quick views, management/destructive actions moved into the detail dialog (`SupervisorDetailDialog`, `SiteDetailDialog`); supervisor list drops Age/Email cols, clubs Age-DOB in detail |
 
 Full specs in `docs/modules/`.
 
@@ -439,6 +452,7 @@ pnpm exec tsx src/db/migrate-ot-rates.ts      # Already run — splits ot_rate i
 pnpm exec tsx src/db/migrate-attendance.ts   # Already run — creates attendance table + enums
 pnpm exec tsx src/db/migrate-attendance-windows.ts  # Already run — adds site time windows + late flags
 pnpm exec tsx src/db/migrate-profile-bank-dob.ts   # Already run — drops workers.age, adds DOB+bank+photo cols
+pnpm exec tsx src/db/migrate-worker-archived.ts    # Already run — adds 'archived' to worker_status enum
 pnpm exec tsx src/db/create-admin.ts          # Already run — creates ANURANJAN admin (idempotent)
 ```
 

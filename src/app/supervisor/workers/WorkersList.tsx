@@ -35,7 +35,7 @@ type Worker = {
   otRate6hr: string | null
   aadhaarDisplay: string | null
   aadhaarLastFour: string | null
-  status: 'pending' | 'active' | 'rejected'
+  status: 'pending' | 'active' | 'rejected' | 'archived'
   rejectionReason: string | null
   resubmitted: boolean
   cityId: string
