@@ -8,6 +8,7 @@ import { eq, and, inArray, or, ne } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { encryptAadhaar, decryptAadhaar, maskAadhaar, extractLastFour, validateAadhaar } from '@/lib/aadhaar'
+import { uploadImage, deleteImage } from '@/lib/cloudinary'
 
 // ─── Auth guards ──────────────────────────────────────────────────────────────
 
@@ -52,7 +53,7 @@ async function assertPhoneUnique(phone: string, excludeWorkerId?: string) {
 const workerSchema = z.object({
   cityId: z.string().uuid(),
   name: z.string().min(1).max(200),
-  age: z.number().int().min(18).max(45),
+  dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   phone: z.string().max(15).optional(),
   emergencyContact: z.string().max(200).optional(),
   category: z.enum(['skilled', 'semi_skilled', 'helper']),
@@ -60,10 +61,30 @@ const workerSchema = z.object({
   otRate2hr: z.string().optional(),
   otRate4hr: z.string().optional(),
   otRate6hr: z.string().optional(),
+  // Bank details — admin-only; ignored when a supervisor submits.
+  accountNumber: z.string().max(40).optional(),
+  ifscCode: z.string().max(20).optional(),
+  // Photo — already uploaded to Cloudinary by the form; final desired state.
+  photoPublicId: z.string().optional(),
+  photoUrl: z.string().optional(),
   aadhaar: z.string().length(12).regex(/^\d{12}$/).refine(validateAadhaar, {
     message: 'Aadhaar number failed checksum validation',
   }),
 })
+
+// ─── Photo upload (worker) ────────────────────────────────────────────────────
+
+export async function uploadWorkerPhoto(formData: FormData): Promise<{ publicId: string; url: string }> {
+  await requireAuth()
+  const file = formData.get('file')
+  if (!(file instanceof File)) throw new Error('No file provided')
+  return uploadImage(file, 'worker')
+}
+
+/** Deletes `oldPublicId` from Cloudinary when it is being replaced or removed. */
+async function reconcileWorkerPhoto(oldPublicId: string | null, newPublicId: string | null) {
+  if (oldPublicId && oldPublicId !== newPublicId) await deleteImage(oldPublicId)
+}
 
 const resubmitWorkerSchema = workerSchema.extend({
   aadhaar: z.string().length(12).regex(/^\d{12}$/).refine(validateAadhaar, {
@@ -90,7 +111,7 @@ export async function createWorkerAsAdmin(input: z.infer<typeof workerSchema>) {
     cityId: data.cityId,
     submittedBy: null,
     name: data.name,
-    age: data.age,
+    dateOfBirth: data.dateOfBirth ?? null,
     phone: data.phone ?? null,
     emergencyContact: data.emergencyContact ?? null,
     category: data.category,
@@ -98,6 +119,10 @@ export async function createWorkerAsAdmin(input: z.infer<typeof workerSchema>) {
     otRate2hr: data.otRate2hr ?? null,
     otRate4hr: data.otRate4hr ?? null,
     otRate6hr: data.otRate6hr ?? null,
+    accountNumber: data.accountNumber ?? null,
+    ifscCode: data.ifscCode ?? null,
+    photoCloudinaryPublicId: data.photoPublicId ?? null,
+    photoCloudinaryUrl: data.photoUrl ?? null,
     aadhaarEncrypted,
     aadhaarLastFour,
     status: 'active',
@@ -134,7 +159,7 @@ export async function submitWorkerAsSupervisor(input: z.infer<typeof workerSchem
     cityId: data.cityId,
     submittedBy: employee.id,
     name: data.name,
-    age: data.age,
+    dateOfBirth: data.dateOfBirth ?? null,
     phone: data.phone ?? null,
     emergencyContact: data.emergencyContact ?? null,
     category: data.category,
@@ -142,6 +167,9 @@ export async function submitWorkerAsSupervisor(input: z.infer<typeof workerSchem
     otRate2hr: data.otRate2hr ?? null,
     otRate4hr: data.otRate4hr ?? null,
     otRate6hr: data.otRate6hr ?? null,
+    // Bank details are admin-only — never stored from a supervisor submission.
+    photoCloudinaryPublicId: data.photoPublicId ?? null,
+    photoCloudinaryUrl: data.photoUrl ?? null,
     aadhaarEncrypted,
     aadhaarLastFour,
     status: 'pending',
@@ -193,7 +221,9 @@ export async function getWorkersForSupervisor() {
     orderBy: (w, { desc }) => [desc(w.createdAt)],
   })
 
-  return rows.map(({ aadhaarEncrypted: _aes, ...w }) => ({
+  // Bank details (accountNumber/ifscCode) are admin-only — strip them so they
+  // never reach a supervisor's browser, alongside the encrypted Aadhaar blob.
+  return rows.map(({ aadhaarEncrypted: _aes, accountNumber: _acct, ifscCode: _ifsc, ...w }) => ({
     ...w,
     aadhaarDisplay: w.aadhaarLastFour ? maskAadhaar(w.aadhaarLastFour) : null,
   }))
@@ -281,12 +311,14 @@ export async function resubmitWorker(workerId: string, input: z.infer<typeof res
     aadhaarLastFour = extractLastFour(data.aadhaar)
   }
 
+  await reconcileWorkerPhoto(worker.photoCloudinaryPublicId, data.photoPublicId ?? null)
+
   await db
     .update(workers)
     .set({
       cityId: data.cityId,
       name: data.name,
-      age: data.age,
+      dateOfBirth: data.dateOfBirth ?? null,
       phone: data.phone ?? null,
       emergencyContact: data.emergencyContact ?? null,
       category: data.category,
@@ -294,6 +326,9 @@ export async function resubmitWorker(workerId: string, input: z.infer<typeof res
       otRate2hr: data.otRate2hr ?? null,
       otRate4hr: data.otRate4hr ?? null,
       otRate6hr: data.otRate6hr ?? null,
+      // Bank details are admin-only — never written from a supervisor resubmit.
+      photoCloudinaryPublicId: data.photoPublicId ?? null,
+      photoCloudinaryUrl: data.photoUrl ?? null,
       aadhaarEncrypted,
       aadhaarLastFour,
       status: 'pending',
@@ -335,12 +370,14 @@ export async function updateWorker(workerId: string, input: z.infer<typeof updat
     aadhaarLastFour = extractLastFour(data.aadhaar)
   }
 
+  await reconcileWorkerPhoto(worker.photoCloudinaryPublicId, data.photoPublicId ?? null)
+
   await db
     .update(workers)
     .set({
       cityId: data.cityId,
       name: data.name,
-      age: data.age,
+      dateOfBirth: data.dateOfBirth ?? null,
       phone: data.phone ?? null,
       emergencyContact: data.emergencyContact ?? null,
       category: data.category,
@@ -348,6 +385,10 @@ export async function updateWorker(workerId: string, input: z.infer<typeof updat
       otRate2hr: data.otRate2hr ?? null,
       otRate4hr: data.otRate4hr ?? null,
       otRate6hr: data.otRate6hr ?? null,
+      accountNumber: data.accountNumber ?? null,
+      ifscCode: data.ifscCode ?? null,
+      photoCloudinaryPublicId: data.photoPublicId ?? null,
+      photoCloudinaryUrl: data.photoUrl ?? null,
       aadhaarEncrypted,
       aadhaarLastFour,
       updatedAt: new Date(),
@@ -371,6 +412,7 @@ export async function deleteWorker(workerId: string) {
   if (hasAttendance) throw new Error('Cannot delete worker with attendance records')
 
   await db.delete(workers).where(eq(workers.id, workerId))
+  await deleteImage(worker.photoCloudinaryPublicId)
   revalidatePath('/admin/workers')
 }
 

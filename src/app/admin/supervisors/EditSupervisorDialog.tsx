@@ -21,7 +21,8 @@ import {
   SelectItem,
   SelectTrigger,
 } from '@/components/ui/select'
-import { updateSupervisor } from '@/actions/supervisors'
+import { updateSupervisor, uploadEmployeePhoto } from '@/actions/supervisors'
+import { PhotoUpload, resolvePhoto } from '@/components/PhotoUpload'
 
 type City = { id: string; name: string }
 type Supervisor = {
@@ -31,6 +32,11 @@ type Supervisor = {
   joinDate: Date | null
   salaryMonthly: string | null
   homeCity: City | null
+  dateOfBirth: string | null
+  accountNumber: string | null
+  ifscCode: string | null
+  photoUrl: string | null
+  photoPublicId: string | null
 }
 
 const schema = z.object({
@@ -39,6 +45,9 @@ const schema = z.object({
   joinDate: z.string().optional(),
   salaryMonthly: z.string().optional(),
   cityId: z.string().uuid().optional(),
+  dateOfBirth: z.string().optional(),
+  accountNumber: z.string().max(40).optional(),
+  ifscCode: z.string().max(20).optional(),
 })
 type FormValues = z.infer<typeof schema>
 
@@ -62,6 +71,8 @@ export function EditSupervisorDialog({
   const [selectedCityName, setSelectedCityName] = useState(
     supervisor?.homeCity?.name ?? ''
   )
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoRemoved, setPhotoRemoved] = useState(false)
   const [serverError, setServerError] = useState('')
   const [isPending, startTransition] = useTransition()
 
@@ -70,6 +81,7 @@ export function EditSupervisorDialog({
     handleSubmit,
     reset,
     control,
+    watch,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -80,13 +92,19 @@ export function EditSupervisorDialog({
           joinDate: toDateInputValue(supervisor.joinDate),
           salaryMonthly: supervisor.salaryMonthly ?? '',
           cityId: supervisor.homeCity?.id ?? '',
+          dateOfBirth: supervisor.dateOfBirth ?? '',
+          accountNumber: supervisor.accountNumber ?? '',
+          ifscCode: supervisor.ifscCode ?? '',
         }
       : undefined,
   })
+  const nameValue = watch('name') ?? ''
 
   function handleClose() {
     reset()
     setSelectedCityName(supervisor?.homeCity?.name ?? '')
+    setPhotoFile(null)
+    setPhotoRemoved(false)
     setServerError('')
   }
 
@@ -95,12 +113,22 @@ export function EditSupervisorDialog({
     setServerError('')
     startTransition(async () => {
       try {
+        const photo = await resolvePhoto({
+          file: photoFile,
+          removed: photoRemoved,
+          existing: { publicId: supervisor.photoPublicId, url: supervisor.photoUrl },
+          upload: uploadEmployeePhoto,
+        })
         await updateSupervisor(supervisor.id, {
           name: values.name,
           phone: values.phone || undefined,
           joinDate: values.joinDate || undefined,
           salaryMonthly: values.salaryMonthly || undefined,
           cityId: values.cityId || undefined,
+          dateOfBirth: values.dateOfBirth || undefined,
+          accountNumber: values.accountNumber || undefined,
+          ifscCode: values.ifscCode || undefined,
+          ...photo,
         })
         onOpenChange(false)
         router.refresh()
@@ -180,6 +208,32 @@ export function EditSupervisorDialog({
                 />
               </div>
             </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-sup-dob">Date of Birth</Label>
+                <Input id="edit-sup-dob" type="date" {...register('dateOfBirth')} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-sup-acct">Account Number</Label>
+                <Input id="edit-sup-acct" {...register('accountNumber')} placeholder="Optional" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-sup-ifsc">IFSC Code</Label>
+                <Input id="edit-sup-ifsc" {...register('ifscCode')} placeholder="Optional" className="uppercase" />
+              </div>
+            </div>
+
+            <PhotoUpload
+              key={supervisor.id}
+              name={nameValue}
+              initialUrl={supervisor.photoUrl}
+              onChange={(file, removed) => { setPhotoFile(file); setPhotoRemoved(removed) }}
+              disabled={isPending}
+            />
 
             {serverError && <p className="text-xs text-destructive">{serverError}</p>}
 

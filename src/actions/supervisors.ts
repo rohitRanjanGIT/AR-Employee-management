@@ -7,11 +7,21 @@ import { headers } from 'next/headers'
 import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { uploadImage, deleteImage } from '@/lib/cloudinary'
 
 async function requireAdmin() {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session || session.user.role !== 'admin') throw new Error('Unauthorised')
   return session
+}
+
+// ─── Photo upload (employee/supervisor) ───────────────────────────────────────
+
+export async function uploadEmployeePhoto(formData: FormData): Promise<{ publicId: string; url: string }> {
+  await requireAdmin()
+  const file = formData.get('file')
+  if (!(file instanceof File)) throw new Error('No file provided')
+  return uploadImage(file, 'employee')
 }
 
 const createSupervisorSchema = z.object({
@@ -22,6 +32,11 @@ const createSupervisorSchema = z.object({
   joinDate: z.string().optional(),
   salaryMonthly: z.string().optional(),
   cityId: z.string().uuid().optional(),
+  dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  accountNumber: z.string().max(40).optional(),
+  ifscCode: z.string().max(20).optional(),
+  photoPublicId: z.string().optional(),
+  photoUrl: z.string().optional(),
 })
 
 export async function createSupervisor(input: z.infer<typeof createSupervisorSchema>) {
@@ -55,6 +70,11 @@ export async function createSupervisor(input: z.infer<typeof createSupervisorSch
     joinDate: data.joinDate ? new Date(data.joinDate) : null,
     salaryMonthly: data.salaryMonthly ?? null,
     cityId: data.cityId ?? null,
+    dateOfBirth: data.dateOfBirth ?? null,
+    accountNumber: data.accountNumber ?? null,
+    ifscCode: data.ifscCode ?? null,
+    photoCloudinaryPublicId: data.photoPublicId ?? null,
+    photoCloudinaryUrl: data.photoUrl ?? null,
     status: 'active',
   })
 
@@ -84,6 +104,11 @@ export async function getAllSupervisors() {
       phone: e.phone,
       joinDate: e.joinDate,
       salaryMonthly: e.salaryMonthly,
+      dateOfBirth: e.dateOfBirth,
+      accountNumber: e.accountNumber,
+      ifscCode: e.ifscCode,
+      photoUrl: e.photoCloudinaryUrl,
+      photoPublicId: e.photoCloudinaryPublicId,
       homeCity: e.city ? { id: e.city.id, name: e.city.name } : null,
       status: e.status,
       assignedSites: e.siteSupervisorAssignments.map((a) => ({
@@ -131,6 +156,11 @@ const updateSupervisorSchema = z.object({
   joinDate: z.string().optional(),
   salaryMonthly: z.string().optional(),
   cityId: z.string().uuid().optional(),
+  dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  accountNumber: z.string().max(40).optional(),
+  ifscCode: z.string().max(20).optional(),
+  photoPublicId: z.string().optional(),
+  photoUrl: z.string().optional(),
 })
 
 export async function updateSupervisor(
@@ -145,6 +175,14 @@ export async function updateSupervisor(
   })
   if (!employee) throw new Error('Supervisor not found')
 
+  // Delete the previous photo when it is being replaced or removed.
+  if (
+    employee.photoCloudinaryPublicId &&
+    employee.photoCloudinaryPublicId !== (data.photoPublicId ?? null)
+  ) {
+    await deleteImage(employee.photoCloudinaryPublicId)
+  }
+
   await db
     .update(employees)
     .set({
@@ -153,6 +191,11 @@ export async function updateSupervisor(
       joinDate: data.joinDate ? new Date(data.joinDate) : null,
       salaryMonthly: data.salaryMonthly ?? null,
       cityId: data.cityId ?? null,
+      dateOfBirth: data.dateOfBirth ?? null,
+      accountNumber: data.accountNumber ?? null,
+      ifscCode: data.ifscCode ?? null,
+      photoCloudinaryPublicId: data.photoPublicId ?? null,
+      photoCloudinaryUrl: data.photoUrl ?? null,
     })
     .where(eq(employees.id, employeeId))
 

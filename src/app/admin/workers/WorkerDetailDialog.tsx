@@ -10,6 +10,9 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { AadhaarRevealButton } from './AadhaarRevealButton'
+import { Avatar } from '@/components/Avatar'
+import { computeAge } from '@/lib/age'
+import { formatDate } from '@/lib/utils'
 
 type Worker = {
   id: string
@@ -25,11 +28,15 @@ type Worker = {
   rejectionReason: string | null
   resubmitted: boolean
   cityId: string
-  age: number | null
+  dateOfBirth: string | null
   phone: string | null
   address: string | null
   joinDate: Date | null
   emergencyContact: string | null
+  accountNumber: string | null
+  ifscCode: string | null
+  photoCloudinaryUrl: string | null
+  photoCloudinaryPublicId: string | null
   city: { id: string; name: string }
   submittedBy: string | null
   submittedByEmployee: { id: string; name: string } | null
@@ -85,14 +92,18 @@ export function WorkerDetailDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <div className="flex items-start justify-between gap-2 pr-6">
-          <DialogTitle className="text-lg">{worker.name}</DialogTitle>
+          <div className="flex items-center gap-3">
+            <Avatar src={worker.photoCloudinaryUrl} name={worker.name} size={48} />
+            <DialogTitle className="text-lg">{worker.name}</DialogTitle>
+          </div>
           <StatusBadge status={worker.status} />
         </div>
 
         <div className="grid grid-cols-2 gap-x-6 gap-y-3 mt-2">
           <Row label="Category" value={CATEGORY_LABELS[worker.category]} />
           <Row label="City" value={worker.city.name} />
-          <Row label="Age" value={worker.age} />
+          <Row label="Date of Birth" value={worker.dateOfBirth ? formatDate(worker.dateOfBirth) : null} />
+          <Row label="Age" value={computeAge(worker.dateOfBirth)} />
           <Row label="Phone" value={worker.phone} />
           <Row label="Emergency Contact" value={worker.emergencyContact} />
           <Row
@@ -114,6 +125,11 @@ export function WorkerDetailDialog({
           <Row label="OT Rate (2 hrs)" value={fmt(worker.otRate2hr)} />
           <Row label="OT Rate (4 hrs)" value={fmt(worker.otRate4hr)} />
           <Row label="OT Rate (6 hrs)" value={fmt(worker.otRate6hr)} />
+        </div>
+
+        <div className="border-t pt-3 mt-1 grid grid-cols-2 gap-x-6 gap-y-3">
+          <Row label="Account Number" value={worker.accountNumber} />
+          <Row label="IFSC Code" value={worker.ifscCode} />
         </div>
 
         <div className="border-t pt-3 mt-1">

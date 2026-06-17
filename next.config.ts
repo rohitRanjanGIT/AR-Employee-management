@@ -7,6 +7,13 @@ const isVerifyBuild = process.env.npm_lifecycle_event === "build:check";
 
 const nextConfig: NextConfig = {
   distDir: isVerifyBuild ? ".next-verify" : ".next",
+  images: {
+    remotePatterns: [{ protocol: "https", hostname: "res.cloudinary.com" }],
+  },
+  experimental: {
+    // Profile-photo uploads pass through server actions as FormData.
+    serverActions: { bodySizeLimit: "10mb" },
+  },
 };
 
 export default nextConfig;

@@ -21,15 +21,16 @@ import {
   SelectItem,
   SelectTrigger,
 } from '@/components/ui/select'
-import { updateWorker } from '@/actions/workers'
+import { updateWorker, uploadWorkerPhoto } from '@/actions/workers'
 import { validateAadhaar } from '@/lib/aadhaar-validate'
+import { PhotoUpload, resolvePhoto } from '@/components/PhotoUpload'
 
 type City = { id: string; name: string }
 type Worker = {
   id: string
   name: string
   cityId: string
-  age: number | null
+  dateOfBirth: string | null
   phone: string | null
   emergencyContact: string | null
   category: 'skilled' | 'semi_skilled' | 'helper'
@@ -37,6 +38,10 @@ type Worker = {
   otRate2hr: string | null
   otRate4hr: string | null
   otRate6hr: string | null
+  accountNumber: string | null
+  ifscCode: string | null
+  photoCloudinaryUrl: string | null
+  photoCloudinaryPublicId: string | null
 }
 
 const CATEGORIES = [
@@ -52,10 +57,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 const schema = z.object({
   cityId: z.string().uuid('City is required'),
   name: z.string().min(1, 'Name is required').max(200),
-  age: z.string().min(1, 'Age is required').refine(
-    (v) => { const n = parseInt(v, 10); return n >= 18 && n <= 45 },
-    'Age must be between 18 and 45'
-  ),
+  dateOfBirth: z.string().optional(),
   phone: z.string().max(15).optional(),
   emergencyContact: z.string().max(200).optional(),
   category: z.enum(['skilled', 'semi_skilled', 'helper']),
@@ -63,6 +65,8 @@ const schema = z.object({
   otRate2hr: z.string().optional(),
   otRate4hr: z.string().optional(),
   otRate6hr: z.string().optional(),
+  accountNumber: z.string().max(40).optional(),
+  ifscCode: z.string().max(20).optional(),
   aadhaar: z.string().optional().refine(
     (v) => !v || (v.length === 12 && /^\d{12}$/.test(v) && validateAadhaar(v)),
     'Must be a valid 12-digit Aadhaar number'
@@ -88,16 +92,18 @@ export function EditWorkerDialog({
   const [selectedCategoryLabel, setSelectedCategoryLabel] = useState(
     worker ? (CATEGORY_LABELS[worker.category] ?? '') : ''
   )
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoRemoved, setPhotoRemoved] = useState(false)
   const [serverError, setServerError] = useState('')
   const [isPending, startTransition] = useTransition()
 
-  const { register, handleSubmit, reset, control, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, reset, control, watch, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     values: worker
       ? {
           cityId: worker.cityId,
           name: worker.name,
-          age: worker.age != null ? String(worker.age) : '',
+          dateOfBirth: worker.dateOfBirth ?? '',
           phone: worker.phone ?? '',
           emergencyContact: worker.emergencyContact ?? '',
           category: worker.category,
@@ -105,14 +111,19 @@ export function EditWorkerDialog({
           otRate2hr: worker.otRate2hr ?? '',
           otRate4hr: worker.otRate4hr ?? '',
           otRate6hr: worker.otRate6hr ?? '',
+          accountNumber: worker.accountNumber ?? '',
+          ifscCode: worker.ifscCode ?? '',
           aadhaar: '',
         }
       : undefined,
   })
+  const nameValue = watch('name') ?? ''
 
   function handleClose() {
     reset()
     setServerError('')
+    setPhotoFile(null)
+    setPhotoRemoved(false)
     if (worker) {
       setSelectedCityName(cities.find((c) => c.id === worker.cityId)?.name ?? '')
       setSelectedCategoryLabel(CATEGORY_LABELS[worker.category] ?? '')
@@ -124,10 +135,16 @@ export function EditWorkerDialog({
     setServerError('')
     startTransition(async () => {
       try {
+        const photo = await resolvePhoto({
+          file: photoFile,
+          removed: photoRemoved,
+          existing: { publicId: worker.photoCloudinaryPublicId, url: worker.photoCloudinaryUrl },
+          upload: uploadWorkerPhoto,
+        })
         await updateWorker(worker.id, {
           cityId: values.cityId,
           name: values.name,
-          age: parseInt(values.age, 10),
+          dateOfBirth: values.dateOfBirth || undefined,
           phone: values.phone || undefined,
           emergencyContact: values.emergencyContact || undefined,
           category: values.category,
@@ -135,6 +152,9 @@ export function EditWorkerDialog({
           otRate2hr: values.otRate2hr || undefined,
           otRate4hr: values.otRate4hr || undefined,
           otRate6hr: values.otRate6hr || undefined,
+          accountNumber: values.accountNumber || undefined,
+          ifscCode: values.ifscCode || undefined,
+          ...photo,
           aadhaar: values.aadhaar || undefined,
         })
         handleClose()
@@ -192,9 +212,8 @@ export function EditWorkerDialog({
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="ew-age">Age</Label>
-                <Input id="ew-age" type="number" min={18} max={45} {...register('age')} />
-                {errors.age && <p className="text-xs text-destructive">{errors.age.message}</p>}
+                <Label htmlFor="ew-dob">Date of Birth</Label>
+                <Input id="ew-dob" type="date" {...register('dateOfBirth')} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="ew-phone">Phone</Label>
@@ -206,6 +225,14 @@ export function EditWorkerDialog({
               <Label htmlFor="ew-emergency">Emergency Contact</Label>
               <Input id="ew-emergency" {...register('emergencyContact')} placeholder="Optional" />
             </div>
+
+            <PhotoUpload
+              key={worker.id}
+              name={nameValue}
+              initialUrl={worker.photoCloudinaryUrl}
+              onChange={(file, removed) => { setPhotoFile(file); setPhotoRemoved(removed) }}
+              disabled={isPending}
+            />
 
             <div className="space-y-1.5">
               <Label>Category</Label>
@@ -254,6 +281,17 @@ export function EditWorkerDialog({
               <div className="space-y-1.5">
                 <Label htmlFor="ew-ot6">OT 6hr (₹)</Label>
                 <Input id="ew-ot6" type="number" step="0.01" min={0} placeholder="Optional" {...register('otRate6hr')} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="ew-acct">Account Number</Label>
+                <Input id="ew-acct" {...register('accountNumber')} placeholder="Optional" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ew-ifsc">IFSC Code</Label>
+                <Input id="ew-ifsc" {...register('ifscCode')} placeholder="Optional" className="uppercase" />
               </div>
             </div>
 

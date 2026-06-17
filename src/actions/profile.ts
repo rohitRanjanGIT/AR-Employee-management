@@ -7,6 +7,7 @@ import { headers } from 'next/headers'
 import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { deleteImage } from '@/lib/cloudinary'
 
 // ─── Auth guards ──────────────────────────────────────────────────────────────
 
@@ -142,6 +143,9 @@ export async function removeSupervisor(employeeId: string) {
 
   // Cascade delete: users → sessions, accounts, employees → site assignments
   await db.delete(users).where(eq(users.id, employee.userId))
+
+  // Best-effort cleanup of the profile photo asset
+  await deleteImage(employee.photoCloudinaryPublicId)
 
   revalidatePath('/admin/supervisors')
   revalidatePath('/admin/sites')

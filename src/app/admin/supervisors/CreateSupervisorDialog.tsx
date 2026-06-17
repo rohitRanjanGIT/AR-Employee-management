@@ -23,7 +23,8 @@ import {
   SelectItem,
   SelectTrigger,
 } from '@/components/ui/select'
-import { createSupervisor } from '@/actions/supervisors'
+import { createSupervisor, uploadEmployeePhoto } from '@/actions/supervisors'
+import { PhotoUpload, resolvePhoto } from '@/components/PhotoUpload'
 
 type City = { id: string; name: string }
 
@@ -35,6 +36,9 @@ const schema = z.object({
   joinDate: z.string().optional(),
   salaryMonthly: z.string().optional(),
   cityId: z.string().uuid().optional(),
+  dateOfBirth: z.string().optional(),
+  accountNumber: z.string().max(40).optional(),
+  ifscCode: z.string().max(20).optional(),
 })
 type FormValues = z.infer<typeof schema>
 
@@ -43,6 +47,8 @@ export function CreateSupervisorDialog({ cities }: { cities: City[] }) {
   const [open, setOpen] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [selectedCityName, setSelectedCityName] = useState('')
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoRemoved, setPhotoRemoved] = useState(false)
   const [serverError, setServerError] = useState('')
   const [isPending, startTransition] = useTransition()
 
@@ -51,12 +57,16 @@ export function CreateSupervisorDialog({ cities }: { cities: City[] }) {
     handleSubmit,
     reset,
     control,
+    watch,
     formState: { errors },
   } = useForm<FormValues>({ resolver: zodResolver(schema) })
+  const nameValue = watch('name') ?? ''
 
   function handleClose() {
     reset()
     setSelectedCityName('')
+    setPhotoFile(null)
+    setPhotoRemoved(false)
     setServerError('')
     setShowPassword(false)
   }
@@ -65,7 +75,13 @@ export function CreateSupervisorDialog({ cities }: { cities: City[] }) {
     setServerError('')
     startTransition(async () => {
       try {
-        await createSupervisor(values)
+        const photo = await resolvePhoto({
+          file: photoFile,
+          removed: photoRemoved,
+          existing: { publicId: null, url: null },
+          upload: uploadEmployeePhoto,
+        })
+        await createSupervisor({ ...values, ...photo })
         handleClose()
         setOpen(false)
         router.refresh()
@@ -174,6 +190,31 @@ export function CreateSupervisorDialog({ cities }: { cities: City[] }) {
               />
             </div>
           </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="sup-dob">Date of Birth</Label>
+              <Input id="sup-dob" type="date" {...register('dateOfBirth')} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="sup-acct">Account Number</Label>
+              <Input id="sup-acct" {...register('accountNumber')} placeholder="Optional" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="sup-ifsc">IFSC Code</Label>
+              <Input id="sup-ifsc" {...register('ifscCode')} placeholder="Optional" className="uppercase" />
+            </div>
+          </div>
+
+          <PhotoUpload
+            name={nameValue}
+            initialUrl={null}
+            onChange={(file, removed) => { setPhotoFile(file); setPhotoRemoved(removed) }}
+            disabled={isPending}
+          />
 
           {serverError && <p className="text-xs text-destructive">{serverError}</p>}
 

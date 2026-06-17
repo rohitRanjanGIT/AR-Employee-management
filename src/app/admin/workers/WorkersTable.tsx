@@ -32,6 +32,8 @@ import {
   DialogClose,
   DialogFooter,
 } from '@/components/ui/dialog'
+import { Avatar } from '@/components/Avatar'
+import { computeAge } from '@/lib/age'
 import { CreateWorkerDialog } from './CreateWorkerDialog'
 import { ApproveWorkerDialog } from './ApproveWorkerDialog'
 import { RejectWorkerDialog } from './RejectWorkerDialog'
@@ -54,11 +56,15 @@ type Worker = {
   rejectionReason: string | null
   resubmitted: boolean
   cityId: string
-  age: number | null
+  dateOfBirth: string | null
   phone: string | null
   address: string | null
   joinDate: Date | null
   emergencyContact: string | null
+  accountNumber: string | null
+  ifscCode: string | null
+  photoCloudinaryUrl: string | null
+  photoCloudinaryPublicId: string | null
   city: { id: string; name: string }
   submittedByEmployee: { id: string; name: string } | null
   submittedBy: string | null
@@ -115,7 +121,20 @@ export function WorkersTable({ workers, cities }: { workers: Worker[]; cities: C
 
   const columns = useMemo(
     () => [
-      col.accessor('name', { header: 'Name' }),
+      col.accessor('name', {
+        header: 'Name',
+        cell: ({ row }) => (
+          <div className="flex items-center gap-2.5">
+            <Avatar src={row.original.photoCloudinaryUrl} name={row.original.name} size={32} />
+            <span>{row.original.name}</span>
+          </div>
+        ),
+      }),
+      col.display({
+        id: 'age',
+        header: 'Age',
+        cell: ({ row }) => <span className="tabular-nums">{computeAge(row.original.dateOfBirth)}</span>,
+      }),
       col.accessor('category', {
         header: 'Category',
         cell: (info) => (

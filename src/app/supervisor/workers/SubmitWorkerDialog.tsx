@@ -23,8 +23,9 @@ import {
   SelectItem,
   SelectTrigger,
 } from '@/components/ui/select'
-import { submitWorkerAsSupervisor } from '@/actions/workers'
+import { submitWorkerAsSupervisor, uploadWorkerPhoto } from '@/actions/workers'
 import { validateAadhaar } from '@/lib/aadhaar-validate'
+import { PhotoUpload, resolvePhoto } from '@/components/PhotoUpload'
 
 type City = { id: string; name: string }
 
@@ -37,10 +38,7 @@ const CATEGORIES = [
 const schema = z.object({
   cityId: z.string().uuid('City is required'),
   name: z.string().min(1, 'Name is required').max(200),
-  age: z.string().min(1, 'Age is required').refine(
-    (v) => { const n = parseInt(v, 10); return n >= 18 && n <= 45 },
-    'Age must be between 18 and 45'
-  ),
+  dateOfBirth: z.string().optional(),
   phone: z.string().max(15).optional(),
   emergencyContact: z.string().max(200).optional(),
   category: z.enum(['skilled', 'semi_skilled', 'helper']),
@@ -61,17 +59,22 @@ export function SubmitWorkerDialog({ assignedCities }: { assignedCities: City[] 
   const [open, setOpen] = useState(false)
   const [selectedCityName, setSelectedCityName] = useState('')
   const [selectedCategoryLabel, setSelectedCategoryLabel] = useState('')
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoRemoved, setPhotoRemoved] = useState(false)
   const [serverError, setServerError] = useState('')
   const [isPending, startTransition] = useTransition()
 
-  const { register, handleSubmit, reset, control, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, reset, control, watch, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
   })
+  const nameValue = watch('name') ?? ''
 
   function handleClose() {
     reset()
     setSelectedCityName('')
     setSelectedCategoryLabel('')
+    setPhotoFile(null)
+    setPhotoRemoved(false)
     setServerError('')
   }
 
@@ -79,10 +82,16 @@ export function SubmitWorkerDialog({ assignedCities }: { assignedCities: City[] 
     setServerError('')
     startTransition(async () => {
       try {
+        const photo = await resolvePhoto({
+          file: photoFile,
+          removed: photoRemoved,
+          existing: { publicId: null, url: null },
+          upload: uploadWorkerPhoto,
+        })
         await submitWorkerAsSupervisor({
           cityId: values.cityId,
           name: values.name,
-          age: parseInt(values.age, 10),
+          dateOfBirth: values.dateOfBirth || undefined,
           phone: values.phone || undefined,
           emergencyContact: values.emergencyContact || undefined,
           category: values.category,
@@ -90,6 +99,7 @@ export function SubmitWorkerDialog({ assignedCities }: { assignedCities: City[] 
           otRate2hr: values.otRate2hr || undefined,
           otRate4hr: values.otRate4hr || undefined,
           otRate6hr: values.otRate6hr || undefined,
+          ...photo,
           aadhaar: values.aadhaar,
         })
         handleClose()
@@ -144,9 +154,8 @@ export function SubmitWorkerDialog({ assignedCities }: { assignedCities: City[] 
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="sw-age">Age</Label>
-              <Input id="sw-age" type="number" min={18} max={45} {...register('age')} placeholder="18–45" />
-              {errors.age && <p className="text-xs text-destructive">{errors.age.message}</p>}
+              <Label htmlFor="sw-dob">Date of Birth</Label>
+              <Input id="sw-dob" type="date" {...register('dateOfBirth')} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="sw-phone">Phone</Label>
@@ -158,6 +167,13 @@ export function SubmitWorkerDialog({ assignedCities }: { assignedCities: City[] 
             <Label htmlFor="sw-emergency">Emergency Contact</Label>
             <Input id="sw-emergency" {...register('emergencyContact')} placeholder="Optional" />
           </div>
+
+          <PhotoUpload
+            name={nameValue}
+            initialUrl={null}
+            onChange={(file, removed) => { setPhotoFile(file); setPhotoRemoved(removed) }}
+            disabled={isPending}
+          />
 
           <div className="space-y-1.5">
             <Label>Category</Label>

@@ -24,11 +24,14 @@ import {
   SelectItem,
   SelectTrigger,
 } from '@/components/ui/select'
+import { Avatar } from '@/components/Avatar'
+import { computeAge } from '@/lib/age'
 import { CreateSupervisorDialog } from './CreateSupervisorDialog'
 import { EditSupervisorDialog } from './EditSupervisorDialog'
 import { DeactivateConfirmDialog } from './DeactivateConfirmDialog'
 import { ResetPasswordDialog } from './ResetPasswordDialog'
 import { RemoveSupervisorDialog } from './RemoveSupervisorDialog'
+import { SupervisorDetailDialog } from './SupervisorDetailDialog'
 
 type City = { id: string; name: string }
 type AssignedSite = { siteId: string; siteName: string; siteCode: string; cityName: string }
@@ -40,6 +43,11 @@ type Supervisor = {
   phone: string | null
   joinDate: Date | null
   salaryMonthly: string | null
+  dateOfBirth: string | null
+  accountNumber: string | null
+  ifscCode: string | null
+  photoUrl: string | null
+  photoPublicId: string | null
   homeCity: City | null
   status: string
   assignedSites: AssignedSite[]
@@ -68,6 +76,7 @@ export function SupervisorsTable({
 }) {
   const [statusFilter, setStatusFilter] = useState('all')
   const [statusFilterName, setStatusFilterName] = useState('All')
+  const [detailTarget, setDetailTarget] = useState<Supervisor | null>(null)
   const [editTarget, setEditTarget] = useState<Supervisor | null>(null)
   const [dialogTarget, setDialogTarget] = useState<{ supervisor: Supervisor; mode: 'deactivate' | 'reactivate' } | null>(null)
   const [resetTarget, setResetTarget] = useState<Supervisor | null>(null)
@@ -86,8 +95,21 @@ export function SupervisorsTable({
 
   const columns = useMemo(
     () => [
-      col.accessor('name', { header: 'Name' }),
+      col.accessor('name', {
+        header: 'Name',
+        cell: ({ row }) => (
+          <div className="flex items-center gap-2.5">
+            <Avatar src={row.original.photoUrl} name={row.original.name} size={32} />
+            <span>{row.original.name}</span>
+          </div>
+        ),
+      }),
       col.accessor('email', { header: 'Email' }),
+      col.display({
+        id: 'age',
+        header: 'Age',
+        cell: ({ row }) => <span className="tabular-nums">{computeAge(row.original.dateOfBirth)}</span>,
+      }),
       col.accessor('phone', {
         header: 'Phone',
         cell: (info) => info.getValue() ?? <span className="text-muted-foreground">—</span>,
@@ -124,6 +146,9 @@ export function SupervisorsTable({
           const s = row.original
           return (
             <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setDetailTarget(s)}>
+                View
+              </Button>
               <Button variant="outline" size="sm" onClick={() => setEditTarget(s)}>
                 Edit
               </Button>
@@ -235,6 +260,12 @@ export function SupervisorsTable({
           </TableBody>
         </Table>
       </div>
+
+      <SupervisorDetailDialog
+        supervisor={detailTarget}
+        open={!!detailTarget}
+        onOpenChange={(o) => { if (!o) setDetailTarget(null) }}
+      />
 
       <EditSupervisorDialog
         supervisor={editTarget}

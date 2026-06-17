@@ -1,6 +1,8 @@
 TO-DO:
-add worker and supervisors account number as well in the schema so that they can mak payments easily-optional field.
 
+also mark the time when the attendanece is bein marked, so that when the attendance is marked late the admin can view when the attendance was marked
+login with only the id without @anuranjan.com check @CLAUDE.md for more context.
+give option to archive a worker, if a worker is archived, 
 
 DONE:
 - Edit supervisor loads original data — confirmed EditSupervisorDialog uses react-hook-form `values` prop so all fields (name, phone, join date, salary, home city) pre-fill from the selected supervisor; removed leftover dead no-op code

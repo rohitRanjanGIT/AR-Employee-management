@@ -21,15 +21,16 @@ import {
   SelectItem,
   SelectTrigger,
 } from '@/components/ui/select'
-import { resubmitWorker } from '@/actions/workers'
+import { resubmitWorker, uploadWorkerPhoto } from '@/actions/workers'
 import { validateAadhaar } from '@/lib/aadhaar-validate'
+import { PhotoUpload, resolvePhoto } from '@/components/PhotoUpload'
 
 type City = { id: string; name: string }
 type Worker = {
   id: string
   name: string
   cityId: string
-  age: number | null
+  dateOfBirth: string | null
   phone: string | null
   emergencyContact: string | null
   category: 'skilled' | 'semi_skilled' | 'helper'
@@ -37,6 +38,8 @@ type Worker = {
   otRate2hr: string | null
   otRate4hr: string | null
   otRate6hr: string | null
+  photoCloudinaryUrl: string | null
+  photoCloudinaryPublicId: string | null
 }
 
 const CATEGORIES = [
@@ -52,10 +55,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 const schema = z.object({
   cityId: z.string().uuid('City is required'),
   name: z.string().min(1, 'Name is required').max(200),
-  age: z.string().min(1, 'Age is required').refine(
-    (v) => { const n = parseInt(v, 10); return n >= 18 && n <= 45 },
-    'Age must be between 18 and 45'
-  ),
+  dateOfBirth: z.string().optional(),
   phone: z.string().max(15).optional(),
   emergencyContact: z.string().max(200).optional(),
   category: z.enum(['skilled', 'semi_skilled', 'helper']),
@@ -88,16 +88,18 @@ export function ResubmitWorkerDialog({
   const [selectedCategoryLabel, setSelectedCategoryLabel] = useState(
     worker ? (CATEGORY_LABELS[worker.category] ?? '') : ''
   )
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoRemoved, setPhotoRemoved] = useState(false)
   const [serverError, setServerError] = useState('')
   const [isPending, startTransition] = useTransition()
 
-  const { register, handleSubmit, reset, control, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, reset, control, watch, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     values: worker
       ? {
           cityId: worker.cityId,
           name: worker.name,
-          age: worker.age != null ? String(worker.age) : '',
+          dateOfBirth: worker.dateOfBirth ?? '',
           phone: worker.phone ?? '',
           emergencyContact: worker.emergencyContact ?? '',
           category: worker.category,
@@ -109,10 +111,13 @@ export function ResubmitWorkerDialog({
         }
       : undefined,
   })
+  const nameValue = watch('name') ?? ''
 
   function handleClose() {
     reset()
     setServerError('')
+    setPhotoFile(null)
+    setPhotoRemoved(false)
     setSelectedCityName(worker ? (assignedCities.find((c) => c.id === worker.cityId)?.name ?? '') : '')
     setSelectedCategoryLabel(worker ? (CATEGORY_LABELS[worker.category] ?? '') : '')
   }
@@ -122,10 +127,16 @@ export function ResubmitWorkerDialog({
     setServerError('')
     startTransition(async () => {
       try {
+        const photo = await resolvePhoto({
+          file: photoFile,
+          removed: photoRemoved,
+          existing: { publicId: worker.photoCloudinaryPublicId, url: worker.photoCloudinaryUrl },
+          upload: uploadWorkerPhoto,
+        })
         await resubmitWorker(worker.id, {
           cityId: values.cityId,
           name: values.name,
-          age: parseInt(values.age, 10),
+          dateOfBirth: values.dateOfBirth || undefined,
           phone: values.phone || undefined,
           emergencyContact: values.emergencyContact || undefined,
           category: values.category,
@@ -133,6 +144,7 @@ export function ResubmitWorkerDialog({
           otRate2hr: values.otRate2hr || undefined,
           otRate4hr: values.otRate4hr || undefined,
           otRate6hr: values.otRate6hr || undefined,
+          ...photo,
           aadhaar: values.aadhaar || undefined,
         })
         handleClose()
@@ -190,9 +202,8 @@ export function ResubmitWorkerDialog({
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="rs-age">Age</Label>
-                <Input id="rs-age" type="number" min={18} max={45} {...register('age')} />
-                {errors.age && <p className="text-xs text-destructive">{errors.age.message}</p>}
+                <Label htmlFor="rs-dob">Date of Birth</Label>
+                <Input id="rs-dob" type="date" {...register('dateOfBirth')} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="rs-phone">Phone</Label>
@@ -204,6 +215,14 @@ export function ResubmitWorkerDialog({
               <Label htmlFor="rs-emergency">Emergency Contact</Label>
               <Input id="rs-emergency" {...register('emergencyContact')} placeholder="Optional" />
             </div>
+
+            <PhotoUpload
+              key={worker.id}
+              name={nameValue}
+              initialUrl={worker.photoCloudinaryUrl}
+              onChange={(file, removed) => { setPhotoFile(file); setPhotoRemoved(removed) }}
+              disabled={isPending}
+            />
 
             <div className="space-y-1.5">
               <Label>Category</Label>

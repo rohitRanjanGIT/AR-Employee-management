@@ -18,6 +18,7 @@ A construction company Employee Management System for **Anuranjan**. It manages 
 | Styling | Tailwind CSS v4 |
 | Tables | TanStack Table v8 |
 | Forms | react-hook-form v7 + zod v4 + `@hookform/resolvers` v5 |
+| Image storage | Cloudinary (`cloudinary` v2 SDK, server-side signed upload/delete) |
 | Package manager | pnpm (use `pnpm`, never `npm` or `yarn`) |
 | Deployment | Vercel |
 
@@ -64,11 +65,15 @@ src/
 │   ├── migrate-ot-rates.ts       # One-off: splits ot_rate into ot_rate_2hr/4hr/6hr (already run)
 │   ├── migrate-attendance.ts     # One-off: creates attendance table + enums (already run)
 │   ├── migrate-attendance-windows.ts  # One-off: adds site time windows + late flags (already run)
+│   ├── migrate-profile-bank-dob.ts    # One-off: drops workers.age, adds DOB+bank+photo cols on workers+employees (already run)
 │   └── create-admin.ts           # One-off: creates the ANURANJAN admin (already run, idempotent)
 ├── lib/
 │   ├── auth.ts                   # better-auth server instance (exports `auth`)
 │   ├── auth-client.ts            # better-auth client (exports `authClient`)
 │   ├── utils.ts                  # shadcn `cn()` + formatDate() (DD/MM/YYYY) + formatDateTime() (DD/MM/YYYY, HH:mm)
+│   ├── age.ts                    # computeAge(dob) → display-only age string ('-' when null); age is never stored
+│   ├── cloudinary.ts             # Server-only: uploadImage(file, folder)/deleteImage(publicId) via signed SDK
+│   ├── cloudinary-url.ts         # Client-safe: avatarUrl() injects f_auto/q_auto/c_fill avatar transform
 │   ├── india-geo.ts              # Static map: Indian state → major cities list
 │   ├── attendance.ts             # todayIST(), classifyDate(), derivedStatus(), isWithinWindow(), computeWageForRow()
 │   ├── payroll.ts                # computeRowWage(), month helpers (getMonthBounds/toYearMonth/formatYearMonth/
@@ -85,7 +90,8 @@ src/
 │   │                             # revokeSupervisorFromSite, deactivateSite, getSiteSnapshot,
 │   │                             # updateSiteAttendanceWindows
 │   ├── supervisors.ts            # createSupervisor, getAllSupervisors, updateSupervisor,
-│   │                             # deactivateSupervisor, reactivateSupervisor
+│   │                             # deactivateSupervisor, reactivateSupervisor, uploadEmployeePhoto
+│   │                             # (create/update carry DOB + bank + photo)
 │   ├── admins.ts                 # getAllAdmins (+live session count), createAdmin, updateAdmin (name),
 │   │                             # deactivate/reactivateAdmin, resetAdminPassword, removeAdmin.
 │   │                             # Users-level (admins have NO employee row); guards: no self-action,
@@ -93,7 +99,8 @@ src/
 │   ├── workers.ts                # createWorkerAsAdmin, submitWorkerAsSupervisor, getAllWorkers,
 │   │                             # getWorkersForSupervisor, approveWorker, rejectWorker,
 │   │                             # resubmitWorker, updateWorker, deleteWorker,
-│   │                             # revealAadhaar, reassignWorkerCity
+│   │                             # revealAadhaar, reassignWorkerCity, uploadWorkerPhoto.
+│   │                             # getWorkersForSupervisor STRIPS accountNumber/ifscCode (admin-only bank)
 │   ├── profile.ts                # updateOwnProfile, changeOwnPassword, resetSupervisorPassword
 │   │                             # (via auth.$context password hasher), removeSupervisor (hard delete)
 │   ├── attendance.ts             # getWorkersForAttendance, markMorningAttendance, markEveningAttendance,
@@ -103,6 +110,8 @@ src/
 │   └── payroll.ts                # getDashboardSummary, getConsolidatedPayroll, getSitePayrollOverview,
 │                                 # getWorkerLifetimeEarnings, getPayrollFilterOptions (all admin-only)
 ├── components/
+│   ├── Avatar.tsx                # Circular avatar: Cloudinary photo (via avatarUrl transform) or initials fallback
+│   ├── PhotoUpload.tsx           # Optional single-photo picker (blob preview); exports resolvePhoto() submit helper
 │   ├── AppSidebar.tsx            # Collapsible sidebar shell (desktop tree + mobile bar, theme + logout); nav configs feed in
 │   ├── AdminNav.tsx              # Admin nav config → AppSidebar. Groups: "Site Management" (Cities/Sites/Work Types)
 │   │                             # and "Users" (Admins/Supervisors). Workers is its own top-level item (not a login user)
@@ -150,16 +159,17 @@ src/
     │   │   └── RemoveAdminDialog.tsx     # Permanent hard delete; type-name-to-confirm
     │   ├── supervisors/
     │   │   ├── page.tsx              # Server: fetches supervisors + active cities
-    │   │   ├── SupervisorsTable.tsx  # TanStack table; status filter; Edit/Reset Password/Deactivate/Remove per row
-    │   │   ├── CreateSupervisorDialog.tsx
-    │   │   ├── EditSupervisorDialog.tsx
+    │   │   ├── SupervisorsTable.tsx  # TanStack table; avatar + Age cols; View/Edit/Reset Password/Deactivate/Remove per row
+    │   │   ├── SupervisorDetailDialog.tsx  # Read view: avatar/DOB/age/salary/sites + admin-only bank block
+    │   │   ├── CreateSupervisorDialog.tsx  # + DOB, photo, bank (admin)
+    │   │   ├── EditSupervisorDialog.tsx    # + DOB, photo, bank (admin)
     │   │   ├── DeactivateConfirmDialog.tsx  # handles both deactivate + reactivate
     │   │   ├── ResetPasswordDialog.tsx      # Admin sets a new password (ends supervisor's session)
     │   │   └── RemoveSupervisorDialog.tsx   # Permanent hard delete; type-name-to-confirm
     │   ├── workers/
     │   │   ├── page.tsx              # Server: fetches workers + active cities
-    │   │   ├── WorkersTable.tsx      # TanStack table; simplified columns; View/Approve/Reject per row
-    │   │   ├── WorkerDetailDialog.tsx  # View all fields; Approve/Reject/Edit/Delete actions
+    │   │   ├── WorkersTable.tsx      # TanStack table; avatar + Age cols; View/Approve/Reject per row
+    │   │   ├── WorkerDetailDialog.tsx  # View all fields (avatar/DOB/age + bank block); Approve/Reject/Edit/Delete
     │   │   ├── CreateWorkerDialog.tsx
     │   │   ├── ApproveWorkerDialog.tsx
     │   │   ├── RejectWorkerDialog.tsx
@@ -235,6 +245,9 @@ All Drizzle `relations()` are declared at the **bottom** of `schema.ts` — neve
 - `workers` are separate from `employees` — employees are company staff (supervisors etc.), workers are site labour
 - `workers.aadhaarEncrypted` is NEVER returned to the client — always stripped with destructuring before returning
 - `workers.otRate2hr / otRate4hr / otRate6hr` — three OT rate tiers (2hr, 4hr, 6hr overtime); single `otRate` column was removed
+- `workers.dateOfBirth` + `employees.dateOfBirth` — nullable `date` ('YYYY-MM-DD'); **age is never stored**, derived for display via `computeAge()` in `lib/age.ts` (shows `-` when null). `workers.age` column was dropped in 1.2.5
+- `workers.accountNumber / ifscCode` + `employees.accountNumber / ifscCode` — nullable plaintext bank details (NOT encrypted). **Admin-only**: `getWorkersForSupervisor` strips them; supervisor worker/employee forms never expose them
+- `workers.photoCloudinaryPublicId / photoCloudinaryUrl` + same on `employees` — nullable profile photo. Public id is used to delete/replace the Cloudinary asset; secure url is rendered (via `avatarUrl` transform). Replacing/removing a photo deletes the old asset server-side in the create/update/delete actions
 - `attendance` unique constraint: `(worker_id, site_id, date)` — one row per worker per site per day
 - `attendance.date` is a Drizzle `date()` column — returns a `'YYYY-MM-DD'` string, always compare as strings
 - `attendance.wageDailySnapshot / otRateSnapshot` — snapshotted from worker at first mark time, never updated after. `otRateSnapshot` is snapshotted from `worker.otRate2hr` (the flat 2-hour-session rate)
@@ -250,7 +263,7 @@ Since `otRateSnapshot` snapshots `worker.otRate2hr` (a flat 2hr-session rate), t
 
 **Worker business rules:**
 - Aadhaar is required (not optional) and validated with Verhoeff checksum
-- Age must be 18–45
+- Date of birth is optional; age is computed for display only (no 18–45 constraint since 1.2.5 — the old `age` field + range check were removed)
 - Phone must be unique across all workers and employees
 - Workers created by admin start as `active`; submitted by supervisor start as `pending`
 - `aadhaarEncrypted` is stripped from all query results before returning to client
@@ -267,6 +280,8 @@ import { env } from '@/env'
 const url = env.DATABASE_URL
 ```
 Exception: `drizzle.config.ts` and `src/db/migrate-*.ts` (CLI/script context, use `dotenv/config` + `process.env`).
+
+Cloudinary vars (`CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`) are **optional** in `env.ts` — the app boots without them. `lib/cloudinary.ts` throws a clear error only when an upload/delete is attempted while they are unset, so profile photos stay disabled until all three are configured.
 
 ### Role checks
 Must be the **first** thing in every server component and every server action:
@@ -393,6 +408,7 @@ Receives `(checked: boolean, event: Event)` — not just `boolean`.
 | 1.1.5 Supervisors | ✅ Done | Create/edit supervisor accounts, view table, deactivate/reactivate, status blocks login, seed creates complete setup |
 | 1.2 Workers | ✅ Done | Aadhaar encryption, admin create/approve/reject/reassign, supervisor submit/resubmit, masked Aadhaar with 30s reveal log, tabbed supervisor UI |
 | 1.2.5 Worker improvements | ✅ Done | Full CRUD (edit/delete), WorkerDetailDialog, 3-tier OT rates, Aadhaar required+Verhoeff, age 18-45, phone uniqueness, work type edit/delete, loading skeletons, PopoverTrigger fix |
+| 1.2.5 Profile/Bank/DOB | ✅ Done | Dropped `workers.age`; added nullable `dateOfBirth` (computed age via `lib/age.ts`, `-` when null) + plaintext admin-only bank (`accountNumber`/`ifscCode`) + Cloudinary profile photo (`photoCloudinaryPublicId`/`Url`) on both `workers` + `employees`. Avatar + Age columns on worker/supervisor lists; bank block on worker/supervisor detail dialogs (admin-only — supervisor payload strips bank); `PhotoUpload`/`Avatar` components, signed server-side upload/delete via `lib/cloudinary.ts`, replace/remove deletes old asset |
 | 1.3 Attendance | ✅ Done | attendance table, morning/evening marking, OT, yesterday edit, 2-7 day edit requests with admin approval, split-shift dimming, admin full table + edit requests tab, dashboard count card |
 | 1.3-pre Profile/Windows/Fix | ✅ Done | Shared `/settings` (own profile + password change); admin reset supervisor password + permanent remove; site attendance time windows (morning/evening HH:MM) with late flags on marks + late badge + supervisor warning toast; workers table defaults to all statuses |
 | 1.4 Payroll Dashboard | ✅ Done | Read-only live wage view: dashboard summary cards, consolidated payroll with cascading state/city/site/month filters, per-site overview, per-worker lifetime earnings, "In Progress/Not Finalized/Finalized" month badges; all computed in JS via `lib/payroll.ts`; "View Payroll"/"View Earnings" links on sites/workers tables |
@@ -422,6 +438,7 @@ pnpm seed                 # Run src/db/seed.ts
 pnpm exec tsx src/db/migrate-ot-rates.ts      # Already run — splits ot_rate into 3 tiers
 pnpm exec tsx src/db/migrate-attendance.ts   # Already run — creates attendance table + enums
 pnpm exec tsx src/db/migrate-attendance-windows.ts  # Already run — adds site time windows + late flags
+pnpm exec tsx src/db/migrate-profile-bank-dob.ts   # Already run — drops workers.age, adds DOB+bank+photo cols
 pnpm exec tsx src/db/create-admin.ts          # Already run — creates ANURANJAN admin (idempotent)
 ```
 
@@ -438,3 +455,5 @@ pnpm exec tsx src/db/create-admin.ts          # Already run — creates ANURANJA
 - Role check must be the first line of every server component and server action — no exceptions
 - `src/env.ts` must validate all required env vars at startup
 - Import `validateAadhaar` from `@/lib/aadhaar-validate` (client-safe) — never from `@/lib/aadhaar` (server-only) in client components
+- Bank details (`accountNumber`/`ifscCode`) are **plaintext** (no encryption, no reveal log) but **admin-only**: strip them from any supervisor-facing payload (as `getWorkersForSupervisor` does) and never render them in supervisor forms/lists
+- `lib/cloudinary.ts` is server-only (`import 'server-only'`) — client components use `lib/cloudinary-url.ts` (transform helper) and the `PhotoUpload`/`Avatar` components; uploads/deletes go through server actions only
