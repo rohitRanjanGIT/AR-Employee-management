@@ -10,6 +10,7 @@ import {
 } from '@tanstack/react-table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { formatDate } from '@/lib/utils'
 import {
   Table,
   TableBody,
@@ -100,7 +101,7 @@ export function AdminsTable({ admins }: { admins: Admin[] }) {
       }),
       col.accessor('createdAt', {
         header: 'Created',
-        cell: (info) => new Date(info.getValue()).toLocaleDateString('en-IN'),
+        cell: (info) => formatDate(info.getValue()),
       }),
       col.display({
         id: 'actions',

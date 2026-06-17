@@ -2,6 +2,7 @@ import { headers } from 'next/headers'
 import { redirect, notFound } from 'next/navigation'
 import { auth } from '@/lib/auth'
 import { getSiteSnapshot } from '@/actions/sites'
+import { formatDate, formatDateTime } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Table,
@@ -56,7 +57,7 @@ export default async function SiteSnapshotPage({ params }: { params: Promise<{ s
           </div>
           <div>
             <p className="text-muted-foreground">Deactivated At</p>
-            <p>{new Date(snapshot.deactivatedAt).toLocaleString()}</p>
+            <p>{formatDateTime(snapshot.deactivatedAt)}</p>
           </div>
         </CardContent>
       </Card>
@@ -81,8 +82,8 @@ export default async function SiteSnapshotPage({ params }: { params: Promise<{ s
                   <TableRow key={s.employeeId}>
                     <TableCell>{s.name}</TableCell>
                     <TableCell>{s.phone ?? '—'}</TableCell>
-                    <TableCell>{new Date(s.assignedAt).toLocaleDateString()}</TableCell>
-                    <TableCell>{new Date(s.deactivatedAt).toLocaleDateString()}</TableCell>
+                    <TableCell>{formatDate(s.assignedAt)}</TableCell>
+                    <TableCell>{formatDate(s.deactivatedAt)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

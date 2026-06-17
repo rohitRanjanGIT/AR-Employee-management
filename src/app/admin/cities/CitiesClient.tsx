@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { formatDate } from '@/lib/utils'
 import {
   Dialog,
   DialogContent,
@@ -282,7 +283,7 @@ const cityColumns = [
   }),
   cityCol.accessor('createdAt', {
     header: 'Added',
-    cell: (info) => new Date(info.getValue()).toLocaleDateString(),
+    cell: (info) => formatDate(info.getValue()),
   }),
 ]
 

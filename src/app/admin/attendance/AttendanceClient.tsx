@@ -4,24 +4,9 @@ import { useState } from 'react'
 import { AttendanceOverview } from './AttendanceOverview'
 import { AttendanceTable } from './AttendanceTable'
 import { EditRequestsTable } from './EditRequestsTable'
+import { AdminEditDialog } from './AdminEditDialog'
 import { Badge } from '@/components/ui/badge'
-
-type AttendanceRecord = {
-  id: string
-  date: string
-  morningMarkedAt: Date | null
-  eveningMarkedAt: Date | null
-  ot: 'none' | '2hr' | '4hr'
-  derivedStatus: 'full' | 'half' | 'absent'
-  isMorningLate: boolean
-  isEveningLate: boolean
-  isEdited: boolean
-  isLocked: boolean
-  worker: { id: string; name: string; category: string }
-  site: { id: string; name: string; city: { name: string } }
-  morningMarkedByEmployee: { name: string } | null
-  eveningMarkedByEmployee: { name: string } | null
-}
+import type { AttendanceRecord } from './DayDetail'
 
 type PendingRecord = {
   id: string
@@ -40,7 +25,6 @@ interface Props {
   records: AttendanceRecord[]
   pendingRequests: PendingRecord[]
   sites: { id: string; name: string; cityName: string }[]
-  workers: { id: string; name: string }[]
   cityWorkerCounts: { city: string; total: number }[]
 }
 
@@ -49,22 +33,21 @@ export function AttendanceClient({
   records,
   pendingRequests,
   sites,
-  workers,
   cityWorkerCounts,
 }: Props) {
   const [tab, setTab] = useState<Tab>(initialTab)
   const [toast, setToast] = useState<string | null>(null)
-  // Drill-down target from the overview → preselects filters in the records table
-  const [drill, setDrill] = useState<{ siteId: string; date: string } | null>(null)
+  const [editRecord, setEditRecord] = useState<AttendanceRecord | null>(null)
+  const [editOpen, setEditOpen] = useState(false)
 
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(null), 3000)
   }
 
-  function viewSite(siteId: string, date: string) {
-    setDrill({ siteId, date })
-    setTab('records')
+  function handleEdit(record: AttendanceRecord) {
+    setEditRecord(record)
+    setEditOpen(true)
   }
 
   const tabBtn = (value: Tab, active: boolean) =>
@@ -111,25 +94,24 @@ export function AttendanceClient({
           records={records}
           sites={sites}
           cityWorkerCounts={cityWorkerCounts}
-          onViewSite={viewSite}
+          onEdit={handleEdit}
         />
       )}
 
       {tab === 'records' && (
-        <AttendanceTable
-          key={drill ? `${drill.siteId}-${drill.date}` : 'all'}
-          records={records}
-          sites={sites}
-          workers={workers}
-          initialSiteId={drill?.siteId}
-          initialDate={drill?.date}
-          onToast={showToast}
-        />
+        <AttendanceTable records={records} sites={sites} onEdit={handleEdit} />
       )}
 
       {tab === 'edit-requests' && (
         <EditRequestsTable records={pendingRequests} onToast={showToast} />
       )}
+
+      <AdminEditDialog
+        record={editRecord}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        onSuccess={showToast}
+      />
     </div>
   )
 }

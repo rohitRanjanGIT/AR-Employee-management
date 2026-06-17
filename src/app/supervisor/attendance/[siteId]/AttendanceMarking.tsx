@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { format, subDays } from 'date-fns'
 import { ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react'
+import { formatDate } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -227,7 +228,7 @@ export function AttendanceMarking({
               ? 'Today'
               : date === yesterday
                 ? 'Yesterday'
-                : format(new Date(date + 'T00:00:00'), 'd MMM yyyy')}
+                : formatDate(date)}
           </span>
           <Button
             variant="outline"

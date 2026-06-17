@@ -17,6 +17,7 @@ import {
   SelectTrigger,
 } from '@/components/ui/select'
 import { adminEditAttendance } from '@/actions/attendance'
+import { formatDate } from '@/lib/utils'
 
 type AttendanceRecord = {
   id: string
@@ -86,7 +87,7 @@ export function AdminEditDialog({ record, open, onOpenChange, onSuccess }: Props
           <div className="text-sm space-y-0.5">
             <p className="font-medium">{record.worker.name}</p>
             <p className="text-muted-foreground">
-              {record.site.name} · {record.site.city.name} · {record.date}
+              {record.site.name} · {record.site.city.name} · {formatDate(record.date)}
             </p>
           </div>
 

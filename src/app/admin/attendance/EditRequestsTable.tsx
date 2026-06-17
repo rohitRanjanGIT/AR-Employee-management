@@ -26,6 +26,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { resolveAttendanceEditRequest } from '@/actions/attendance'
+import { formatDate } from '@/lib/utils'
 
 type EditRequest = {
   proposedMorningPresent: boolean
@@ -86,7 +87,7 @@ export function EditRequestsTable({ records, onToast }: Props) {
   const columns = [
     col.accessor('date', {
       header: 'Date',
-      cell: (info) => <span className="text-sm tabular-nums">{info.getValue()}</span>,
+      cell: (info) => <span className="text-sm tabular-nums">{formatDate(info.getValue())}</span>,
     }),
     col.accessor((row) => row.site.name, {
       id: 'site',
@@ -151,7 +152,7 @@ export function EditRequestsTable({ records, onToast }: Props) {
         if (!v) return null
         return (
           <span className="text-xs text-muted-foreground tabular-nums">
-            {new Date(v).toLocaleDateString('en-IN')}
+            {formatDate(v)}
           </span>
         )
       },

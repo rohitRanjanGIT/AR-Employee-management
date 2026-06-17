@@ -1,7 +1,7 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -14,15 +14,9 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { todayIST } from '@/lib/attendance'
-
-type AttendanceRecord = {
-  id: string
-  date: string
-  ot: 'none' | '2hr' | '4hr'
-  derivedStatus: 'full' | 'half' | 'absent'
-  worker: { id: string; name: string; category: string }
-  site: { id: string; name: string; city: { name: string } }
-}
+import { formatINR } from '@/lib/payroll'
+import { formatDate } from '@/lib/utils'
+import { DayDetail, rowWage, type AttendanceRecord } from './DayDetail'
 
 type SiteInfo = { id: string; name: string; cityName: string }
 type CityCount = { city: string; total: number }
@@ -31,7 +25,7 @@ interface Props {
   records: AttendanceRecord[]
   sites: SiteInfo[]
   cityWorkerCounts: CityCount[]
-  onViewSite: (siteId: string, date: string) => void
+  onEdit: (r: AttendanceRecord) => void
 }
 
 function shiftDate(date: string, delta: number): string {
@@ -43,23 +37,15 @@ function shiftDate(date: string, delta: number): string {
   return `${yyyy}-${mm}-${dd}`
 }
 
-function prettyDate(date: string): string {
-  return new Date(`${date}T00:00:00`).toLocaleDateString('en-IN', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
-}
-
-type Tally = { marked: number; full: number; half: number; ot: number }
-const emptyTally = (): Tally => ({ marked: 0, full: 0, half: 0, ot: 0 })
+type Tally = { marked: number; full: number; half: number; ot: number; pay: number }
+const emptyTally = (): Tally => ({ marked: 0, full: 0, half: 0, ot: 0, pay: 0 })
 
 function addToTally(t: Tally, r: AttendanceRecord) {
   t.marked++
   if (r.derivedStatus === 'full') t.full++
   else if (r.derivedStatus === 'half') t.half++
   if (r.ot !== 'none') t.ot++
+  t.pay += rowWage(r)
 }
 
 function Kpi({ label, value, hint }: { label: string; value: number; hint?: string }) {
@@ -74,9 +60,22 @@ function Kpi({ label, value, hint }: { label: string; value: number; hint?: stri
   )
 }
 
-export function AttendanceOverview({ records, sites, cityWorkerCounts, onViewSite }: Props) {
+export function AttendanceOverview({ records, sites, cityWorkerCounts, onEdit }: Props) {
   const today = todayIST()
   const [date, setDate] = useState(today)
+  const [expandedSites, setExpandedSites] = useState<Set<string>>(new Set())
+
+  // Collapse any open site detail when the day changes
+  useEffect(() => setExpandedSites(new Set()), [date])
+
+  function toggleSite(siteId: string) {
+    setExpandedSites((prev) => {
+      const next = new Set(prev)
+      if (next.has(siteId)) next.delete(siteId)
+      else next.add(siteId)
+      return next
+    })
+  }
 
   const dayRecords = useMemo(() => records.filter((r) => r.date === date), [records, date])
 
@@ -175,7 +174,7 @@ export function AttendanceOverview({ records, sites, cityWorkerCounts, onViewSit
           </Button>
         )}
         <span className="ml-auto text-sm text-muted-foreground">
-          {prettyDate(date)}
+          {formatDate(date)}
           {isToday && <Badge variant="outline" className="ml-2 text-xs">Today</Badge>}
         </span>
       </div>
@@ -192,7 +191,7 @@ export function AttendanceOverview({ records, sites, cityWorkerCounts, onViewSit
 
       {dayRecords.length === 0 && (
         <p className="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground">
-          No attendance marked on {prettyDate(date)}.
+          No attendance marked on {formatDate(date)}.
         </p>
       )}
 
@@ -254,48 +253,69 @@ export function AttendanceOverview({ records, sites, cityWorkerCounts, onViewSit
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-8 text-xs"></TableHead>
                 <TableHead className="text-xs">Site</TableHead>
                 <TableHead className="text-xs">City</TableHead>
                 <TableHead className="text-xs">Marked</TableHead>
                 <TableHead className="text-xs">Full</TableHead>
                 <TableHead className="text-xs">Half</TableHead>
                 <TableHead className="text-xs">OT</TableHead>
-                <TableHead className="text-xs"></TableHead>
+                <TableHead className="text-xs text-right">Day Pay</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {siteRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-6 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="py-6 text-center text-muted-foreground">
                     No active sites.
                   </TableCell>
                 </TableRow>
               ) : (
-                siteRows.map((s) => (
-                  <TableRow key={s.id} className={s.marked === 0 ? 'opacity-60' : undefined}>
-                    <TableCell className="py-2 text-sm font-medium">{s.name}</TableCell>
-                    <TableCell className="py-2 text-sm text-muted-foreground">{s.cityName}</TableCell>
-                    <TableCell className="py-2 text-sm tabular-nums">
-                      {s.marked > 0 ? s.marked : <span className="text-muted-foreground">Not marked</span>}
-                    </TableCell>
-                    <TableCell className="py-2 text-sm tabular-nums">{s.full}</TableCell>
-                    <TableCell className="py-2 text-sm tabular-nums">{s.half}</TableCell>
-                    <TableCell className="py-2 text-sm tabular-nums">
-                      {s.ot > 0 ? s.ot : <span className="text-muted-foreground">—</span>}
-                    </TableCell>
-                    <TableCell className="py-2 text-right">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs"
-                        disabled={s.marked === 0}
-                        onClick={() => onViewSite(s.id, date)}
-                      >
-                        View records
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
+                siteRows.flatMap((s) => {
+                  const hasRecords = s.marked > 0
+                  const isOpen = hasRecords && expandedSites.has(s.id)
+                  return [
+                    <TableRow
+                      key={s.id}
+                      className={`${hasRecords ? 'cursor-pointer hover:bg-muted/40' : 'opacity-60'}`}
+                      onClick={hasRecords ? () => toggleSite(s.id) : undefined}
+                    >
+                      <TableCell className="py-2">
+                        {hasRecords &&
+                          (isOpen ? (
+                            <ChevronDown className="size-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="size-4 text-muted-foreground" />
+                          ))}
+                      </TableCell>
+                      <TableCell className="py-2 text-sm font-medium">{s.name}</TableCell>
+                      <TableCell className="py-2 text-sm text-muted-foreground">{s.cityName}</TableCell>
+                      <TableCell className="py-2 text-sm tabular-nums">
+                        {hasRecords ? s.marked : <span className="text-muted-foreground">Not marked</span>}
+                      </TableCell>
+                      <TableCell className="py-2 text-sm tabular-nums">{s.full}</TableCell>
+                      <TableCell className="py-2 text-sm tabular-nums">{s.half}</TableCell>
+                      <TableCell className="py-2 text-sm tabular-nums">
+                        {s.ot > 0 ? s.ot : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell className="py-2 text-right text-sm font-medium tabular-nums">
+                        {s.marked > 0 ? formatINR(s.pay) : <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                    </TableRow>,
+                    isOpen && (
+                      <TableRow key={`${s.id}-detail`} className="bg-muted/20">
+                        <TableCell colSpan={8} className="p-0">
+                          <DayDetail
+                            records={dayRecords
+                              .filter((r) => r.site.id === s.id)
+                              .sort((a, b) => a.worker.name.localeCompare(b.worker.name))}
+                            onEdit={onEdit}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ),
+                  ]
+                })
               )}
             </TableBody>
           </Table>

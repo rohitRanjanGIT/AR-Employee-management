@@ -29,8 +29,6 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
 
   const activeWorkers = workers.filter((w) => w.status === 'active')
 
-  const workerFilterOptions = activeWorkers.map((w) => ({ id: w.id, name: w.name }))
-
   // Active worker headcount per city — drives the coverage metric in the overview
   const cityCountMap = new Map<string, number>()
   for (const w of activeWorkers) {
@@ -47,7 +45,6 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
       records={records}
       pendingRequests={pendingRequests}
       sites={activeSites}
-      workers={workerFilterOptions}
       cityWorkerCounts={cityWorkerCounts}
     />
   )

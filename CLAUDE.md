@@ -68,7 +68,7 @@ src/
 ├── lib/
 │   ├── auth.ts                   # better-auth server instance (exports `auth`)
 │   ├── auth-client.ts            # better-auth client (exports `authClient`)
-│   ├── utils.ts                  # shadcn `cn()` utility
+│   ├── utils.ts                  # shadcn `cn()` + formatDate() (DD/MM/YYYY) + formatDateTime() (DD/MM/YYYY, HH:mm)
 │   ├── india-geo.ts              # Static map: Indian state → major cities list
 │   ├── attendance.ts             # todayIST(), classifyDate(), derivedStatus(), isWithinWindow(), computeWageForRow()
 │   ├── payroll.ts                # computeRowWage(), month helpers (getMonthBounds/toYearMonth/formatYearMonth/
@@ -168,9 +168,14 @@ src/
     │   │   └── AadhaarRevealButton.tsx  # 30s auto-mask, reveal logging
     │   ├── attendance/
     │   │   ├── page.tsx              # Server: fetches all records + pending requests + filter data
-    │   │   ├── AttendanceClient.tsx  # Tabbed: Overview | Records | Edit Requests
-    │   │   ├── AttendanceOverview.tsx # Per-site/day coverage summary; drill-down into Records
-    │   │   ├── AttendanceTable.tsx   # TanStack table; site/worker/status/edited filters; late badges; inline edit
+    │   │   ├── AttendanceClient.tsx  # Tabbed: Overview | Records | Edit Requests; HOSTS the single AdminEditDialog
+    │   │   │                         # (lifted) — passes onEdit to both Overview and Records
+    │   │   ├── AttendanceOverview.tsx # Single-day coverage: KPI cards + city-wise + site-wise (with Day Pay,
+    │   │   │                         # expand-in-place per-worker detail via DayDetail)
+    │   │   ├── AttendanceTable.tsx   # Records ledger: ONE row per site-day (date/site/city/recorded-by/workers/
+    │   │   │                         # full-half/OT/Day Pay); filters date+site+city; expand row → DayDetail
+    │   │   ├── DayDetail.tsx         # SHARED per-worker detail table + AttendanceRecord type + rowWage()/CATEGORY_LABELS;
+    │   │   │                         # used by both AttendanceOverview and AttendanceTable
     │   │   ├── EditRequestsTable.tsx # Pending requests; approve/reject with confirm dialog
     │   │   └── AdminEditDialog.tsx   # Direct morning/evening/OT edit form
     │   └── payroll/
@@ -290,6 +295,9 @@ Use `react-hook-form` directly with `register` or `Controller`. The shadcn `form
 useForm({ values: supervisor ? { name: supervisor.name, ... } : undefined })
 ```
 
+### Dates & currency
+Display **all** calendar dates as **DD/MM/YYYY** via `formatDate()` (timestamps: `formatDateTime()` → `DD/MM/YYYY, HH:mm`) from `@/lib/utils` — never call `toLocaleDateString()` ad-hoc, and never render a raw `yyyy-MM-dd` string in the UI. Internal date *keys/params* stay `yyyy-MM-dd` (date-fns `format`). Money via `formatINR()` from `@/lib/payroll`. Note: native `<input type="date">` pickers still render in the browser/OS locale (not controllable without a custom picker); only their stored value is `yyyy-MM-dd`.
+
 ### Drizzle queries
 Use `db.query.<table>.findMany({ with: { ... } })` for relational queries. Raw `db.select()` for aggregations (count, group by).
 
@@ -389,6 +397,7 @@ Receives `(checked: boolean, event: Event)` — not just `boolean`.
 | 1.3-pre Profile/Windows/Fix | ✅ Done | Shared `/settings` (own profile + password change); admin reset supervisor password + permanent remove; site attendance time windows (morning/evening HH:MM) with late flags on marks + late badge + supervisor warning toast; workers table defaults to all statuses |
 | 1.4 Payroll Dashboard | ✅ Done | Read-only live wage view: dashboard summary cards, consolidated payroll with cascading state/city/site/month filters, per-site overview, per-worker lifetime earnings, "In Progress/Not Finalized/Finalized" month badges; all computed in JS via `lib/payroll.ts`; "View Payroll"/"View Earnings" links on sites/workers tables |
 | 1.4-post Admin mgmt & polish | ✅ Done | Admin management at `/admin/admins` (create/edit-name/reset-password/deactivate/reactivate/remove) with self-action + last-active-admin guards; sidebar "Users" group (Admins + Supervisors), Workers kept separate; 2-hour hard session cap in `auth.ts`; branded favicon (optimized `icon.png`/`apple-icon.png`/`favicon.ico` in `app/`) |
+| 1.4-post Attendance Records redesign | ✅ Done | Admin Records reworked into a per-site-per-day ledger (one row per site/day: recorded-by supervisors tagged by session, worker/full-half/OT tallies, **Day Pay** via `lib/payroll` `computeRowWage`); shared `DayDetail` expand-in-place per-worker table reused by Records + Overview site-wise; single `AdminEditDialog` lifted to `AttendanceClient` (one `onEdit` for both tabs); Day Pay column added to Overview site-wise; site-wide date display standardized to DD/MM/YYYY via `formatDate`/`formatDateTime`. (Day Pay OT portion still inherits the `otRateSnapshot=2hr` quirk — see OT-formula note above) |
 
 Full specs in `docs/modules/`.
 
