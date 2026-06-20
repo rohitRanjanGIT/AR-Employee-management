@@ -4,10 +4,7 @@ import { auth } from '@/lib/auth'
 import { db } from '@/db'
 import { employees } from '@/db/schema'
 import { eq } from 'drizzle-orm'
-import { Badge } from '@/components/ui/badge'
 import { AdminNav } from '@/components/AdminNav'
-import { ThemeToggle } from '@/components/ThemeToggle'
-import LogoutButton from './dashboard/logout-button'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -24,15 +21,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
-      {/* Mobile-only top bar — desktop session controls live in the sidebar footer */}
-      <header className="flex items-center justify-between gap-4 border-b bg-background/95 px-4 py-3 backdrop-blur lg:hidden">
-        <span className="text-sm font-semibold tracking-tight">Anuranjan EMS</span>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline">Admin</Badge>
-          <ThemeToggle />
-          <LogoutButton />
-        </div>
-      </header>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
         <AdminNav userName={displayName} userEmail={email} />
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>

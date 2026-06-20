@@ -48,5 +48,13 @@ const navItems: NavEntry[] = [
 ]
 
 export function AdminNav({ userName, userEmail }: { userName: string; userEmail: string }) {
-  return <AppSidebar brand="Anuranjan EMS" userName={userName} userEmail={userEmail} items={navItems} />
+  return (
+    <AppSidebar
+      brand="Anuranjan EMS"
+      userName={userName}
+      userEmail={userEmail}
+      roleLabel="Admin"
+      items={navItems}
+    />
+  )
 }
