@@ -9,6 +9,7 @@ import {
   pgEnum,
   date,
   unique,
+  index,
 } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 
@@ -273,7 +274,48 @@ export const attendance = pgTable(
   })
 )
 
+// ─── Site Photos ──────────────────────────────────────────────────────────────
+// The SITE owns the photo (site_id is the primary relationship); uploaded_by is
+// attribution only. city_id is DENORMALIZED — snapshotted from the site's current
+// city at upload time (matches the attendance precedent), never re-synced.
+
+export const sitePhotos = pgTable(
+  'site_photos',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    // Nullable: site-less (admin-only) general photos (e.g. brochures) have no site;
+    // cityId is the denormalized snapshot of the site's city when a site is attached.
+    siteId: uuid('site_id').references(() => sites.id, { onDelete: 'cascade' }),
+    cityId: uuid('city_id').references(() => cities.id),
+    uploadedBy: text('uploaded_by')
+      .notNull()
+      .references(() => users.id),
+    description: text('description'),
+    tags: text('tags').array().notNull().default([]),
+    cloudinaryPublicId: text('cloudinary_public_id').notNull(),
+    cloudinaryUrl: text('cloudinary_url').notNull(),
+    takenAt: timestamp('taken_at', { withTimezone: true }),
+    uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
+    isHidden: boolean('is_hidden').notNull().default(false),
+    hiddenAt: timestamp('hidden_at', { withTimezone: true }),
+    hiddenBy: text('hidden_by').references(() => users.id),
+  },
+  (table) => ({
+    siteUploadedIdx: index('site_photos_site_uploaded_idx').on(
+      table.siteId,
+      table.uploadedAt.desc()
+    ),
+    uploadedByIdx: index('site_photos_uploaded_by_idx').on(table.uploadedBy),
+    cityIdx: index('site_photos_city_idx').on(table.cityId),
+    tagsIdx: index('site_photos_tags_idx').using('gin', table.tags),
+  })
+)
+
 // ─── Relations ────────────────────────────────────────────────────────────────
+
+export const usersRelations = relations(users, ({ one }) => ({
+  employee: one(employees, { fields: [users.id], references: [employees.userId] }),
+}))
 
 export const statesRelations = relations(states, ({ many }) => ({
   cities: many(cities),
@@ -291,6 +333,7 @@ export const sitesRelations = relations(sites, ({ one, many }) => ({
   siteSupervisorAssignments: many(siteSupervisorAssignments),
   siteSnapshots: many(siteSnapshots),
   attendance: many(attendance),
+  sitePhotos: many(sitePhotos),
 }))
 
 export const workTypesRelations = relations(workTypes, ({ many }) => ({
@@ -333,6 +376,21 @@ export const workersRelations = relations(workers, ({ one, many }) => ({
     references: [employees.id],
   }),
   attendance: many(attendance),
+}))
+
+export const sitePhotosRelations = relations(sitePhotos, ({ one }) => ({
+  site: one(sites, { fields: [sitePhotos.siteId], references: [sites.id] }),
+  city: one(cities, { fields: [sitePhotos.cityId], references: [cities.id] }),
+  uploadedByUser: one(users, {
+    fields: [sitePhotos.uploadedBy],
+    references: [users.id],
+    relationName: 'photoUploader',
+  }),
+  hiddenByUser: one(users, {
+    fields: [sitePhotos.hiddenBy],
+    references: [users.id],
+    relationName: 'photoHider',
+  }),
 }))
 
 export const attendanceRelations = relations(attendance, ({ one }) => ({

@@ -6,6 +6,7 @@ import {
   CalendarDays,
   Gauge,
   HardHat,
+  Images,
   IndianRupee,
   Layers,
   MapPinned,
@@ -38,6 +39,7 @@ const navItems: NavEntry[] = [
   { label: 'Workers', href: '/admin/workers', icon: HardHat },
   { label: 'Attendance', href: '/admin/attendance', icon: CalendarDays },
   { label: 'Payroll', href: '/admin/payroll', icon: IndianRupee },
+  { label: 'Gallery', href: '/admin/gallery', icon: Images },
   { label: 'Settings', href: '/settings', icon: Settings },
 ]
 

@@ -4,6 +4,9 @@ import { auth } from '@/lib/auth'
 import { getSupervisorSites } from '@/actions/sites'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import Link from 'next/link'
+import { Images } from 'lucide-react'
 
 export default async function SupervisorSitesPage() {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -60,6 +63,11 @@ export default async function SupervisorSitesPage() {
                       </div>
                     </div>
                   )}
+                  <Link href={`/supervisor/sites/${site.id}/gallery`}>
+                    <Button variant="outline" size="sm">
+                      <Images /> View Gallery
+                    </Button>
+                  </Link>
                 </CardContent>
               </Card>
             )

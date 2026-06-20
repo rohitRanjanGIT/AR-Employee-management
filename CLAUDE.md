@@ -67,6 +67,8 @@ src/
 │   ├── migrate-attendance-windows.ts  # One-off: adds site time windows + late flags (already run)
 │   ├── migrate-profile-bank-dob.ts    # One-off: drops workers.age, adds DOB+bank+photo cols on workers+employees (already run)
 │   ├── migrate-worker-archived.ts     # One-off: adds 'archived' to worker_status enum (already run)
+│   ├── migrate-site-photos.ts         # One-off: creates site_photos table + indexes incl. GIN on tags (already run)
+│   ├── migrate-site-photos-nullable.ts # One-off: makes site_photos.site_id + city_id nullable (already run)
 │   └── create-admin.ts           # One-off: creates the ANURANJAN admin (already run, idempotent)
 ├── lib/
 │   ├── auth.ts                   # better-auth server instance (exports `auth`)
@@ -81,7 +83,11 @@ src/
 │   ├── payroll.ts                # computeRowWage(), month helpers (getMonthBounds/toYearMonth/formatYearMonth/
 │   │                             # isCurrentMonth/getMonthRange), formatINR(), payroll aggregation types
 │   ├── aadhaar.ts                # Server-only: AES-256-GCM encrypt/decrypt + re-exports from aadhaar-validate
-│   └── aadhaar-validate.ts       # Client-safe: Verhoeff checksum (validateAadhaar), maskAadhaar
+│   ├── aadhaar-validate.ts       # Client-safe: Verhoeff checksum (validateAadhaar), maskAadhaar
+│   ├── exif.ts                   # Server-only: parseTakenAt(buffer) → UTC Date|null (DateTimeOriginal +
+│   │                             # OffsetTimeOriginal; no offset ⇒ Asia/Kolkata) via exifr
+│   └── site-photos.ts            # Client-safe: PHOTO_TAGS vocab + TAG_LABELS, upload limits, thumb/grid/
+│                                 # lightbox Cloudinary transforms, relativeTime(), shared gallery types
 ├── middleware.ts                 # Optimistic session cookie check, redirects to /login
 ├── actions/
 │   ├── states.ts                 # createState, getAllStates (with city+site counts)
@@ -110,8 +116,13 @@ src/
 │   │                             # submitAttendanceEditRequest, resolveAttendanceEditRequest,
 │   │                             # adminEditAttendance, getAttendanceForAdmin,
 │   │                             # getAttendanceForSupervisor, getPendingEditRequests
-│   └── payroll.ts                # getDashboardSummary, getConsolidatedPayroll, getSitePayrollOverview,
-│                                 # getWorkerLifetimeEarnings, getPayrollFilterOptions (all admin-only)
+│   ├── payroll.ts                # getDashboardSummary, getConsolidatedPayroll, getSitePayrollOverview,
+│   │                             # getWorkerLifetimeEarnings, getPayrollFilterOptions (all admin-only)
+│   └── site-photos.ts            # Module 1.6 gallery: getSitePhotos, getGallerySite, getGlobalGallery,
+│                                 # get*FilterOptions, getSiteGalleryUploaders, getUploadableSites,
+│                                 # uploadSitePhotos (batch allSettled), editSitePhoto, hide/unhide/
+│                                 # deleteSitePhoto, getRecentSitePhotosForAdmin/Supervisor.
+│                                 # Visibility + canModifySitePhoto enforced server-side
 ├── components/
 │   ├── Avatar.tsx                # Circular avatar: Cloudinary photo (via avatarUrl transform) or initials fallback
 │   ├── PhotoUpload.tsx           # Optional single-photo picker (blob preview); exports resolvePhoto() submit helper
@@ -121,6 +132,21 @@ src/
 │   ├── SupervisorNav.tsx         # Supervisor nav config → AppSidebar
 │   ├── ThemeProvider.tsx         # Light/dark theme context (useTheme)
 │   ├── ThemeToggle.tsx           # Standalone theme toggle button (mobile headers)
+│   ├── gallery/                  # Module 1.6 site photo gallery (shared admin + supervisor)
+│   │   ├── GalleryView.tsx       # Square aspect-ratio grid (2/3/4 cols) + design-style inline-Select
+│   │   │                         # toolbar (Tag/Site/City/Uploader + admin Include-hidden + Clear filters
+│   │   │                         # + count + Upload) + empty state; lightbox/upload/edit/delete
+│   │   │                         # orchestration; re-queries server actions on filter change
+│   │   ├── PhotoCard.tsx         # Square cell: always-visible color-coded tag pills (TAG_COLORS; 'site'
+│   │   │                         # pill shows the site code), hover edit/hide/unhide/delete circular
+│   │   │                         # buttons, hover gradient info bar
+│   │   ├── UploadPhotosDialog.tsx # Tag-first flow (identical for admin + supervisor): the 'site' tag reveals
+│   │   │                         # the site picker; no 'site' tag ⇒ a general site-less photo. ≤10 photos/10MB; dashed
+│   │   │                         # dropzone + preview grid; one description+tag set; partial-failure retry
+│   │   ├── EditPhotoDialog.tsx   # Per-row description + tags edit
+│   │   ├── PhotoLightbox.tsx     # Full image + meta + action menu (edit/hide/unhide/delete)
+│   │   └── RecentPhotosStrip.tsx # Dashboard teaser: 'grid' variant (admin dense 80px) / 'strip' variant
+│   │                             # (supervisor horizontal scroll + optional Upload tile)
 │   └── ui/                       # shadcn components (base-nova style)
 └── app/
     ├── layout.tsx                # Root layout: fonts, ThemeProvider, metadata (title/description)
@@ -154,7 +180,10 @@ src/
     │   │   ├── DeleteSiteDialog.tsx  # Permanent cascade delete; type-site-name-to-confirm
     │   │   ├── EditTimeWindowsDialog.tsx  # Edit a site's morning/evening attendance windows
     │   │   ├── SiteSupervisorList.tsx  # Supervisor chips with revoke popover (used in SiteDetailDialog)
-    │   │   └── [siteId]/snapshot/page.tsx
+    │   │   ├── [siteId]/snapshot/page.tsx
+    │   │   └── [siteId]/gallery/page.tsx  # Per-site gallery (admin); SiteDetailDialog has a Gallery link
+    │   ├── gallery/page.tsx          # Global gallery (admin only): all sites, site/city/uploader/tag/date
+    │   │                             # filters + Include-hidden toggle
     │   ├── admins/
     │   │   ├── page.tsx                  # Server: getAllAdmins
     │   │   ├── AdminsTable.tsx           # TanStack table; status filter; live session count; self-row locked
@@ -210,7 +239,9 @@ src/
     └── supervisor/
         ├── layout.tsx            # Auth check + header + SupervisorNav + status guard
         ├── dashboard/page.tsx    # Shows assigned site count + pending worker submissions
-        ├── sites/page.tsx        # Card grid of assigned sites (read-only)
+        ├── sites/
+        │   ├── page.tsx          # Card grid of assigned sites (read-only) + per-card View Gallery link
+        │   └── [siteId]/gallery/page.tsx  # Per-site gallery (current-assignment access enforced server-side)
         ├── workers/
         │   ├── page.tsx          # Server: workers + assigned cities
         │   ├── WorkersList.tsx   # Tabbed: Active / My Submissions / Rejected
@@ -227,7 +258,7 @@ All admin, supervisor, and settings route folders have a `loading.tsx` skeleton.
 
 ---
 
-## Database schema (14 tables)
+## Database schema (15 tables)
 
 Declaration order in `schema.ts` matters due to FK references:
 
@@ -243,6 +274,7 @@ site_supervisor_assignments               ← junction: sites × employees
 workers                                    ← uuid PK, FK → cities + employees
 site_snapshots                             ← uuid PK, FK → sites (JSONB payload)
 attendance                                 ← uuid PK, FK → sites + workers + cities + employees (×2)
+site_photos                                ← uuid PK, FK → sites (cascade, NULLABLE) + cities (nullable) + users (×2)
 ```
 
 All Drizzle `relations()` are declared at the **bottom** of `schema.ts` — never inline with table declarations.
@@ -265,6 +297,7 @@ All Drizzle `relations()` are declared at the **bottom** of `schema.ts` — neve
 - `attendance.isLocked` — scaffolded for Module 1.5 finalization; blocks all edits once true. **Module 1.4 never sets it** (1.4 payroll is read-only — no finalization, no locking)
 - `sites.morningAttendanceStart/End` + `eveningAttendanceStart/End` — nullable `HH:MM` strings; null = no time restriction
 - `attendance.isMorningLate/isEveningLate` — set at mark time via `isWithinWindow()` in `lib/attendance.ts`
+- `site_photos` (Module 1.6) — `siteId` + denormalized `cityId` are **NULLABLE**: a photo may be **site-less** (a "general" photo — brochure/process/material/team — uploaded without the `site` tag). When attached, the SITE owns the photo (`siteId` cascade-deletes with the site) and `cityId` snapshots the site's city at upload (never re-synced — matches `attendance`). `uploadedBy`/`hiddenBy` are `users` text FKs (attribution only). `tags` is `text[]` from a LOCKED vocabulary (`PHOTO_TAGS` in `lib/site-photos.ts` = `site, material, team, process, brochure`) — GIN-indexed for `&&`/`@>`. The **`site` tag is special**: choosing it requires attaching a site (enforced server-side). Upload logic is **identical for admin + supervisor**: no `site` tag ⇒ a site-less general photo; both may create them. **Visibility of site-less photos:** admins see all in the global gallery; a supervisor sees only the site-less photos **they** uploaded (in `/supervisor/gallery`, via `supervisorScope` = assigned-site photos OR own site-less). `takenAt` (timestamptz, nullable) parsed from EXIF server-side; sort everywhere is `COALESCE(taken_at, uploaded_at) DESC`. `isHidden` soft-hide (`hiddenAt`/`hiddenBy`); hidden rows excluded from default views, global gallery, dashboards — admin reveals via Include-hidden, supervisors never see hidden (even own). No approval flow; uploads blocked when site status ≠ `active`
 
 **⚠️ Two divergent OT wage formulas exist — reconcile before relying on either:**
 - `lib/attendance.ts` `computeWageForRow()` — treats `otRateSnapshot` as a per-hour rate: 2hr → `otRate × 2`, 4hr → `otRate × 4`
@@ -427,15 +460,16 @@ Receives `(checked: boolean, event: Event)` — not just `boolean`.
 | 1.4-post Admin mgmt & polish | ✅ Done | Admin management at `/admin/admins` (create/edit-name/reset-password/deactivate/reactivate/remove) with self-action + last-active-admin guards; sidebar "Users" group (Admins + Supervisors), Workers kept separate; 2-hour hard session cap in `auth.ts`; branded favicon (optimized `icon.png`/`apple-icon.png`/`favicon.ico` in `app/`) |
 | 1.4-post Attendance Records redesign | ✅ Done | Admin Records reworked into a per-site-per-day ledger (one row per site/day: recorded-by supervisors tagged by session, worker/full-half/OT tallies, **Day Pay** via `lib/payroll` `computeRowWage`); shared `DayDetail` expand-in-place per-worker table reused by Records + Overview site-wise; single `AdminEditDialog` lifted to `AttendanceClient` (one `onEdit` for both tabs); Day Pay column added to Overview site-wise; site-wide date display standardized to DD/MM/YYYY via `formatDate`/`formatDateTime`. (Day Pay OT portion still inherits the `otRateSnapshot=2hr` quirk — see OT-formula note above) |
 | 1.4-post UX: archive/delete + action bars | ✅ Done | Worker **archive/restore** (soft delete, `archived` status) + permanent cascade **deleteWorker** (worker + attendance, type-to-confirm; archive required first when attendance exists); archived hidden from active/supervisor/attendance views and from the "All" worker filter. Site **deleteSite** (permanent cascade) + `DeleteSiteDialog`. Action-bar redesign on supervisors + sites tables: compact icon row for quick views, management/destructive actions moved into the detail dialog (`SupervisorDetailDialog`, `SiteDetailDialog`); supervisor list drops Age/Email cols, clubs Age-DOB in detail |
+| 1.6 Site Photo Gallery | ✅ Done | `site_photos` table (GIN-indexed `tags`; `siteId`/`cityId` nullable for site-less general photos). Per-site galleries (`/admin` + `/supervisor`), admin global gallery (`/admin/gallery`), and a supervisor gallery (`/supervisor/gallery`, sidebar item) aggregating all assigned sites + the supervisor's own site-less photos (`supervisorScope`). Square grid + hover-reveal cards (color-coded tag pills) + lightbox. Tag-first batch upload — **identical for admin + supervisor** (≤10 photos / 10 MB each, dashed dropzone + preview grid, locked vocab `site/material/team/process/brochure`; `site` tag reveals the site picker, no `site` tag ⇒ site-less general photo; one description+tag set, `Promise.allSettled` partial-failure + retry), server-side EXIF `takenAt` (Asia/Kolkata fallback). Filters: Tag/Site/City/Uploader + Include-hidden (no date filter). Visibility + `canModifySitePhoto` enforced server-side (supervisor = currently-assigned sites + own site-less); per-row edit/hide, admin unhide + Cloudinary-first hard delete; dashboard previews (admin dense grid last 8 / supervisor scroll strip last 6 + Upload tile). Uploads blocked on non-active sites. `exifr` added |
 
 Full specs in `docs/modules/`.
 
 ## Modules planned (not started)
 
 - 1.5 Payroll Finalization
-- 1.6 Materials
-- 1.7 Expenses
-- 1.8 Reports
+- 1.7 Materials
+- 1.8 Expenses
+- 1.9 Reports
 
 ---
 
@@ -453,6 +487,8 @@ pnpm exec tsx src/db/migrate-attendance.ts   # Already run — creates attendanc
 pnpm exec tsx src/db/migrate-attendance-windows.ts  # Already run — adds site time windows + late flags
 pnpm exec tsx src/db/migrate-profile-bank-dob.ts   # Already run — drops workers.age, adds DOB+bank+photo cols
 pnpm exec tsx src/db/migrate-worker-archived.ts    # Already run — adds 'archived' to worker_status enum
+pnpm exec tsx src/db/migrate-site-photos.ts        # Already run — creates site_photos table + indexes (GIN on tags)
+pnpm exec tsx src/db/migrate-site-photos-nullable.ts  # Already run — makes site_photos.site_id + city_id nullable
 pnpm exec tsx src/db/create-admin.ts          # Already run — creates ANURANJAN admin (idempotent)
 ```
 
@@ -471,3 +507,4 @@ pnpm exec tsx src/db/create-admin.ts          # Already run — creates ANURANJA
 - Import `validateAadhaar` from `@/lib/aadhaar-validate` (client-safe) — never from `@/lib/aadhaar` (server-only) in client components
 - Bank details (`accountNumber`/`ifscCode`) are **plaintext** (no encryption, no reveal log) but **admin-only**: strip them from any supervisor-facing payload (as `getWorkersForSupervisor` does) and never render them in supervisor forms/lists
 - `lib/cloudinary.ts` is server-only (`import 'server-only'`) — client components use `lib/cloudinary-url.ts` (transform helper) and the `PhotoUpload`/`Avatar` components; uploads/deletes go through server actions only
+- Site gallery (Module 1.6): visibility is enforced **server-side on every query/action** — a supervisor sees only currently-assigned sites (plus their own site-less photos) and cannot reach another site's photos by URL. `canModifySitePhoto` (admin OR uploader: own site-less always / own site photo while still assigned) gates all hide/edit; unhide + hard-delete are admin-only. Hard delete is **Cloudinary-first** (`deleteImageStrict` throws on failure) so a DB row is never orphaned against a missing asset. `lib/exif.ts` is server-only; tags are validated against the locked vocabulary server-side

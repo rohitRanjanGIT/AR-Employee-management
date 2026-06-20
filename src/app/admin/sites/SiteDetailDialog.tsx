@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { UserPlus, Clock, Ban, Trash2, Camera } from 'lucide-react'
+import { UserPlus, Clock, Ban, Trash2, Camera, Images } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
@@ -124,6 +124,11 @@ export function SiteDetailDialog({
         <DialogFooter className="flex-wrap gap-2 mt-2">
           {site && (
             <div className="flex flex-1 flex-wrap gap-2">
+              <Link href={`/admin/sites/${site.id}/gallery`}>
+                <Button variant="outline" size="sm">
+                  <Images /> Gallery
+                </Button>
+              </Link>
               {site.status === 'active' ? (
                 <>
                   <Button

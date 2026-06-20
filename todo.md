@@ -1,10 +1,8 @@
 TO-DO:
 
 1. also mark the time when the attendanece is bein marked, so that when the attendance is marked late the admin can view when the attendance was marked
-2. login with only the id without @anuranjan.com check @CLAUDE.md for more context.
-3. give option to archive a worker, if a worker is archived, 
-
-5. login with only the id without @anuranjan.com check @CLAUDE.md for more context. for example we have anuranjan@anuranjan.com, in the frontend make it such that the frontend accepts only anuranjan as emal as well as the id section states email or id.
+2. in the gallery feature, after uploading a new image, its not loaded automatically, have to reload the page.  
+3. loader in login. 
 
 DONE:
 - Edit supervisor loads original data — confirmed EditSupervisorDialog uses react-hook-form `values` prop so all fields (name, phone, join date, salary, home city) pre-fill from the selected supervisor; removed leftover dead no-op code

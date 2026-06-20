@@ -6,13 +6,18 @@ import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { IndianRupee, Users, Building2, ClipboardClock } from 'lucide-react'
 import { getDashboardSummary } from '@/actions/payroll'
+import { getRecentSitePhotosForAdmin } from '@/actions/site-photos'
 import { formatINR } from '@/lib/payroll'
+import { RecentPhotosStrip } from '@/components/gallery/RecentPhotosStrip'
 
 export default async function AdminDashboard() {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session || session.user.role !== 'admin') redirect('/login')
 
-  const summary = await getDashboardSummary()
+  const [summary, recentPhotos] = await Promise.all([
+    getDashboardSummary(),
+    getRecentSitePhotosForAdmin(8),
+  ])
 
   return (
     <div className="space-y-6">
@@ -91,6 +96,23 @@ export default async function AdminDashboard() {
           </Card>
         </Link>
       </div>
+
+      {/* Recent Site Activity */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <CardTitle className="text-sm text-muted-foreground">Recent Site Activity</CardTitle>
+          <Link href="/admin/gallery" className="text-xs text-primary hover:underline">
+            View gallery
+          </Link>
+        </CardHeader>
+        <CardContent>
+          {recentPhotos.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No photos uploaded yet.</p>
+          ) : (
+            <RecentPhotosStrip photos={recentPhotos} basePath="/admin/sites" variant="grid" />
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }
