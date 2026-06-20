@@ -266,7 +266,8 @@ src/
     │   └── payroll/
     │       ├── page.tsx              # Server: filter options + initial consolidated payroll
     │       ├── PayrollClient.tsx     # Filters + site cards; re-queries on filter change
-    │       ├── PayrollFilters.tsx    # Cascading state/city/site + independent month (native selects)
+    │       ├── PayrollFilters.tsx    # Cascading state/city/site + independent month (shadcn Select, base-nova
+    │       │                         #   'all' sentinel → undefined; matches the /workers + /balance dropdowns)
     │       ├── SitePayrollCard.tsx   # Collapsible site → month table → per-worker breakdown
     │       ├── MonthStatusBadge.tsx  # In Progress / Not Finalized / Finalized badge
     │       ├── types.ts              # Shared payroll display types + CATEGORY_LABELS
@@ -452,6 +453,8 @@ const [selectedName, setSelectedName] = useState('')
 ```
 
 Do **not** import or use `<SelectValue />` for selects that use non-string display values (UUIDs etc.).
+
+For a Select **controlled by props** (e.g. `PayrollFilters`, `BalanceList`), derive the trigger label from the current value each render (`options.find(o => o.id === value)?.name ?? 'All …'`) instead of keeping separate label state. base-nova has **no empty-string value** — use an `'all'` sentinel for the "all" option and map it back to `undefined`/`'all'` in the handler.
 
 ### 2. Dialog uses named exports (not dot notation)
 
