@@ -32,8 +32,8 @@ Only `admin` and `supervisor` have UI built so far.
 
 | Role | Entry point | Access |
 |---|---|---|
-| `admin` | `/admin/dashboard` | Full management of states, cities, sites, work types, workers; manage other admins + supervisors at `/admin/admins` and `/admin/supervisors` |
-| `supervisor` | `/supervisor/dashboard` | Assigned sites + submit/resubmit workers |
+| `admin` | `/admin/dashboard` | Full management of states, cities, sites, work types, workers; manage other admins + supervisors at `/admin/admins` and `/admin/supervisors`; payroll finalization; advance approval/direct-entry |
+| `supervisor` | `/supervisor/dashboard` | Assigned sites + submit/resubmit workers + mark attendance + submit advance requests |
 
 **Admins vs supervisors at the data layer:** supervisors are created with an `employees` row (profile: phone/salary/city/site assignments). **Admins have NO `employees` row** — they exist only as a `users` row with `role='admin'` (seed + `create-admin.ts` never insert an employee). The Admins module (`actions/admins.ts`) therefore manages admins purely at the `users` level (name/email/status/password). `/settings` falls back to `session.user.name` when no employee row exists.
 
@@ -59,7 +59,7 @@ account — e.g. `supervisor` resolves to `supervisor@anuranjan.com`. Full email
 src/
 ├── env.ts                        # env var validation — import env vars from here, never process.env!
 ├── db/
-│   ├── schema.ts                 # ALL 14 tables + all Drizzle relations in one file
+│   ├── schema.ts                 # ALL 18 tables + all Drizzle relations in one file
 │   ├── index.ts                  # Drizzle client (exports `db`)
 │   ├── seed.ts                   # Seeds users, work type, sample state/city/site, supervisor assignment (idempotent)
 │   ├── migrate-ot-rates.ts       # One-off: splits ot_rate into ot_rate_2hr/4hr/6hr (already run)
@@ -69,6 +69,8 @@ src/
 │   ├── migrate-worker-archived.ts     # One-off: adds 'archived' to worker_status enum (already run)
 │   ├── migrate-site-photos.ts         # One-off: creates site_photos table + indexes incl. GIN on tags (already run)
 │   ├── migrate-site-photos-nullable.ts # One-off: makes site_photos.site_id + city_id nullable (already run)
+│   ├── migrate-payroll-finalization.ts # One-off: creates payroll_snapshots + transactions + enums (already run)
+│   ├── migrate-advances.ts             # One-off: creates advances + enums; adds payroll_snapshots.advance_recovered (already run)
 │   └── create-admin.ts           # One-off: creates the ANURANJAN admin (already run, idempotent)
 ├── lib/
 │   ├── auth.ts                   # better-auth server instance (exports `auth`)
@@ -80,8 +82,10 @@ src/
 │   ├── cloudinary-url.ts         # Client-safe: avatarUrl() injects f_auto/q_auto/c_fill avatar transform
 │   ├── india-geo.ts              # Static map: Indian state → major cities list
 │   ├── attendance.ts             # todayIST(), classifyDate(), derivedStatus(), isWithinWindow(), computeWageForRow()
-│   ├── payroll.ts                # computeRowWage(), month helpers (getMonthBounds/toYearMonth/formatYearMonth/
-│   │                             # isCurrentMonth/getMonthRange), formatINR(), payroll aggregation types
+│   ├── payroll.ts                # computeRowWage(), computeMaxRecoverable() (1.7), month helpers (getMonthBounds/
+│   │                             # toYearMonth/formatYearMonth/isCurrentMonth/getMonthRange), formatINR(), types
+│   ├── advances.ts               # Server-only (Module 1.7): getOutstandingBalance/getOutstandingBalances
+│   │                             # (derived balance — single source of truth) + writeRecoveryRow
 │   ├── aadhaar.ts                # Server-only: AES-256-GCM encrypt/decrypt + re-exports from aadhaar-validate
 │   ├── aadhaar-validate.ts       # Client-safe: Verhoeff checksum (validateAadhaar), maskAadhaar
 │   ├── exif.ts                   # Server-only: parseTakenAt(buffer) → UTC Date|null (DateTimeOriginal +
@@ -117,19 +121,43 @@ src/
 │   │                             # adminEditAttendance, getAttendanceForAdmin,
 │   │                             # getAttendanceForSupervisor, getPendingEditRequests
 │   ├── payroll.ts                # getDashboardSummary, getConsolidatedPayroll, getSitePayrollOverview,
-│   │                             # getWorkerLifetimeEarnings, getPayrollFilterOptions (all admin-only)
+│   │                             # getWorkerLifetimeEarnings (merges finalized currentTotal), getPayrollFilterOptions (admin-only)
+│   ├── payroll-finalization.ts   # Module 1.5/1.7: isMonthFinalized, getUnfinalizedEarlierMonths,
+│   │                             # getFinalizationPreview (+outstanding/pendingAdvances), finalizePayroll
+│   │                             # (+recovery+pending gate), getFinalizedSnapshot, addPayrollCorrection,
+│   │                             # getFinalizedMonthsForSite (all admin-only)
+│   ├── advances.ts               # Module 1.7: submitAdvanceRequest/getMyAdvanceRequests/
+│   │                             # getSupervisorWorkerBalances (supervisor, scoped); getPendingAdvances/
+│   │                             # approveAdvance/rejectAdvance/createAdvanceDirect/getActiveWorkerBalances/
+│   │                             # getAdvancesLedger/getWorkerOutstanding (admin); getWorkerStatement
+│   │                             # (admin + supervisor-scoped: earned vs advance-taken vs running due +
+│   │                             # month filter + line items). getWorkerBalanceOverview (role-aware,
+│   │                             # supervisor-scoped): per-worker {totalEarned, totalAdvance, balance} lifetime
+│   │                             # figures (earned mirrors statement: finalized snapshot overrides live) backing
+│   │                             # the dedicated /balance pages. All role-enforced server-side
 │   └── site-photos.ts            # Module 1.6 gallery: getSitePhotos, getGallerySite, getGlobalGallery,
 │                                 # get*FilterOptions, getSiteGalleryUploaders, getUploadableSites,
 │                                 # uploadSitePhotos (batch allSettled), editSitePhoto, hide/unhide/
 │                                 # deleteSitePhoto, getRecentSitePhotosForAdmin/Supervisor.
 │                                 # Visibility + canModifySitePhoto enforced server-side
 ├── components/
+│   ├── AddCorrectionDialog.tsx   # Shared (Module 1.5): add a payroll correction (amount+reason) to a
+│   │                             # finalized site-worker-month; used by snapshot view + worker earnings
+│   ├── WorkerStatement.tsx       # Shared (Module 1.7): per-worker statement — Total Earned / Advance Taken /
+│   │                             # Due (=earned−advance, ±) cards + month/All-time filter + advance line-item
+│   │                             # ledger; re-queries getWorkerStatement on change. Used by admin + supervisor
+│   │                             # (backHref + optional backLabel — "Back to Advances"/"Back to Balances")
+│   ├── BalanceList.tsx           # Shared (Module 1.7): dedicated Worker Balances table — Total Earned / Advance
+│   │                             # Taken / Balance (=earned−advance, ±) per worker + summary cards + client filters
+│   │                             # (search/city/balance-status); names link to {basePath}/workers/[id] statement.
+│   │                             # Used by admin + supervisor balance pages
 │   ├── Avatar.tsx                # Circular avatar: Cloudinary photo (via avatarUrl transform) or initials fallback
 │   ├── PhotoUpload.tsx           # Optional single-photo picker (blob preview); exports resolvePhoto() submit helper
 │   ├── AppSidebar.tsx            # Collapsible sidebar shell (desktop tree + mobile bar, theme + logout); nav configs feed in
 │   ├── AdminNav.tsx              # Admin nav config → AppSidebar. Groups: "Site Management" (Cities/Sites/Work Types)
 │   │                             # and "Users" (Admins/Supervisors). Workers is its own top-level item (not a login user)
-│   ├── SupervisorNav.tsx         # Supervisor nav config → AppSidebar
+│   │                             # Top-level items include Advances + Balances (Wallet icon)
+│   ├── SupervisorNav.tsx         # Supervisor nav config → AppSidebar (incl. Advances + Balances)
 │   ├── ThemeProvider.tsx         # Light/dark theme context (useTheme)
 │   ├── ThemeToggle.tsx           # Standalone theme toggle button (mobile headers)
 │   ├── gallery/                  # Module 1.6 site photo gallery (shared admin + supervisor)
@@ -182,6 +210,14 @@ src/
     │   │   ├── SiteSupervisorList.tsx  # Supervisor chips with revoke popover (used in SiteDetailDialog)
     │   │   ├── [siteId]/snapshot/page.tsx
     │   │   └── [siteId]/gallery/page.tsx  # Per-site gallery (admin); SiteDetailDialog has a Gallery link
+    │   ├── advances/                 # Module 1.7 (admin): page.tsx + AdminAdvancesClient.tsx
+    │   │   │                         #   (tabs: Balances (default) · Pending queue approve/edit-approve/reject ·
+    │   │   │                         #   History; + Record Advance direct-entry dialog; worker names link to statement)
+    │   │   └── [workerId]/           # page.tsx → shared WorkerStatement (earned/advance/due + month filter)
+    │   ├── balance/                  # Module 1.7 (admin): dedicated Worker Balances section (sidebar item)
+    │   │   ├── page.tsx              # Server: getWorkerBalanceOverview → shared BalanceList (filterable
+    │   │   │                         #   earned/advance/balance table: search/city/balance-status)
+    │   │   └── workers/[id]/         # page.tsx → shared WorkerStatement (backLabel "Back to Balances")
     │   ├── gallery/page.tsx          # Global gallery (admin only): all sites, site/city/uploader/tag/date
     │   │                             # filters + Include-hidden toggle
     │   ├── admins/
@@ -234,8 +270,15 @@ src/
     │       ├── SitePayrollCard.tsx   # Collapsible site → month table → per-worker breakdown
     │       ├── MonthStatusBadge.tsx  # In Progress / Not Finalized / Finalized badge
     │       ├── types.ts              # Shared payroll display types + CATEGORY_LABELS
-    │       ├── sites/[siteId]/       # page.tsx + SitePayrollOverview.tsx (per-site monthly view)
-    │       └── workers/[workerId]/   # page.tsx + WorkerEarningsOverview.tsx (lifetime earnings)
+    │       ├── sites/[siteId]/       # page.tsx + SitePayrollOverview.tsx (per-site monthly view; 1.5 badges
+    │       │                         #   + Finalize button; finalized rows are locked → link to snapshot)
+    │       │   ├── finalize/[yearMonth]/   # page.tsx + FinalizationReview.tsx (1.5: adjustments, live totals,
+    │       │   │                           #   soft warning for earlier unfinalized months, confirm dialog; 1.7:
+    │       │   │                           #   outstanding/recovery/net/carry-forward cols + pending-advance block banner)
+    │       │   └── snapshot/[yearMonth]/   # page.tsx + FinalizedSnapshotView.tsx (1.5: read-only locked snapshot,
+    │       │                               #   corrections popover chips, per-row Add Correction; 1.7: Recovered/Net Paid cols)
+    │       └── workers/[workerId]/   # page.tsx + WorkerEarningsOverview.tsx (lifetime earnings; 1.5: finalized
+    │                                 #   months show currentTotal + Finalized badge + Add Correction)
     └── supervisor/
         ├── layout.tsx            # Auth check + header + SupervisorNav + status guard
         ├── dashboard/page.tsx    # Shows assigned site count + pending worker submissions
@@ -247,18 +290,25 @@ src/
         │   ├── WorkersList.tsx   # Tabbed: Active / My Submissions / Rejected
         │   ├── SubmitWorkerDialog.tsx
         │   └── ResubmitWorkerDialog.tsx
-        └── attendance/
-            ├── page.tsx          # Server: card grid of active assigned sites
-            └── [siteId]/
-                ├── page.tsx              # Server: date param + getWorkersForAttendance
-                └── AttendanceMarking.tsx # Client: morning/evening tabs, worker list, OT, edit requests
+        ├── attendance/
+        │   ├── page.tsx          # Server: card grid of active assigned sites
+        │   └── [siteId]/
+        │       ├── page.tsx              # Server: date param + getWorkersForAttendance
+        │       └── AttendanceMarking.tsx # Client: morning/evening tabs, worker list, OT, edit requests
+        ├── advances/             # Module 1.7 (supervisor): page.tsx + SupervisorAdvancesClient.tsx
+        │   │                     #   (tabs: Balances (scoped worker outstanding) · My Requests; Request Advance
+        │   │                     #   dialog shows current outstanding; worker names link to statement)
+        │   └── [workerId]/       # page.tsx → shared WorkerStatement (scope enforced server-side)
+        └── balance/              # Module 1.7 (supervisor): dedicated Worker Balances section (sidebar item)
+            ├── page.tsx          # Server: getWorkerBalanceOverview (scoped) → shared BalanceList
+            └── workers/[id]/     # page.tsx → shared WorkerStatement (scope enforced server-side)
 ```
 
 All admin, supervisor, and settings route folders have a `loading.tsx` skeleton.
 
 ---
 
-## Database schema (15 tables)
+## Database schema (18 tables)
 
 Declaration order in `schema.ts` matters due to FK references:
 
@@ -275,6 +325,9 @@ workers                                    ← uuid PK, FK → cities + employee
 site_snapshots                             ← uuid PK, FK → sites (JSONB payload)
 attendance                                 ← uuid PK, FK → sites + workers + cities + employees (×2)
 site_photos                                ← uuid PK, FK → sites (cascade, NULLABLE) + cities (nullable) + users (×2)
+payroll_snapshots                          ← uuid PK, FK → sites + workers + users + self (correctionOf)
+transactions                               ← uuid PK, FK → sites + cities + workers (nullable) + users
+advances                                   ← uuid PK, FK → workers + users (×2) + payroll_snapshots (nullable)
 ```
 
 All Drizzle `relations()` are declared at the **bottom** of `schema.ts` — never inline with table declarations.
@@ -294,9 +347,14 @@ All Drizzle `relations()` are declared at the **bottom** of `schema.ts` — neve
 - `attendance` unique constraint: `(worker_id, site_id, date)` — one row per worker per site per day
 - `attendance.date` is a Drizzle `date()` column — returns a `'YYYY-MM-DD'` string, always compare as strings
 - `attendance.wageDailySnapshot / otRateSnapshot` — snapshotted from worker at first mark time, never updated after. `otRateSnapshot` is snapshotted from `worker.otRate2hr` (the flat 2-hour-session rate)
-- `attendance.isLocked` — scaffolded for Module 1.5 finalization; blocks all edits once true. **Module 1.4 never sets it** (1.4 payroll is read-only — no finalization, no locking)
+- `attendance.isLocked` — **set by Module 1.5 `finalizePayroll`** for the whole site-month at finalization; once true, 1.3 edit actions reject the row. (1.4 payroll remains read-only and never sets it)
 - `sites.morningAttendanceStart/End` + `eveningAttendanceStart/End` — nullable `HH:MM` strings; null = no time restriction
 - `attendance.isMorningLate/isEveningLate` — set at mark time via `isWithinWindow()` in `lib/attendance.ts`
+- `payroll_snapshots` (Module 1.5) — immutable per `(site, worker, year_month)` record written at finalization. Partial unique index `payroll_snapshots_original_unique` enforces **one original (non-correction) per site-worker-month**. `siteSnapshot`/`workerSnapshot` are JSONB context captured at finalize time (historical, never re-synced). `grossWage`/`adjustmentAmount`/`finalWage` are the wage breakdown (`finalWage = grossWage + adjustmentAmount`). **Corrections are additive**: a correction is its own row with `isCorrection=true` + `correctionOf` (self-FK → the original); a worker-month's "current total" = original `finalWage` + Σ correction `finalWage`. Corrections never touch attendance or the original row
+- `transactions` (Module 1.5 ledger) — one row per finalized worker-month (`type='payroll_worker'`) and per correction (`type='payroll_correction'`); `amount` is **always positive**, sign lives in `direction` (`debit`/`credit`). `referenceId` → `payroll_snapshots.id`; `cityId` denormalized for rollups. `transaction_type` enum reserves `advance`/`site_expense` for future modules. Since 1.7 the `payroll_worker` `amount` = **net_paid** (= `finalWage − advanceRecovered`), NOT `finalWage` — **advances never write to `transactions`** (they live only in the `advances` ledger)
+- `advances` (Module 1.7) — typed ledger **separate from `transactions`**, worker-level only (no site attribution). `type` (`issuance`/`recovery`) + `status` (`pending`/`approved`/`rejected`). **Outstanding balance is ALWAYS derived, never stored**: `SUM(approved issuance) − SUM(recovery)` (pending/rejected issuance are invisible). `issuance` = supervisor request (`pending`) or admin direct/approve (`approved`); `recovery` = system-written at finalization (always `approved`, immutable, links to its `payroll_snapshots` row via `recoveryPayrollSnapshotId`). `amount` always positive (whole rupees, app-enforced). `reason` required on issuance (app-level). Helpers in `lib/advances.ts` (`getOutstandingBalance`/`getOutstandingBalances`/`writeRecoveryRow`, server-only) + pure `computeMaxRecoverable` in `lib/payroll.ts`
+- `payroll_snapshots.advanceRecovered` (Module 1.7) — discrete from `adjustmentAmount`; `net_paid = (gross + adjustment) − advanceRecovered`. `finalWage` keeps its 1.5 meaning (gross + adjustment = earned wage); net_paid is derived for the transaction + display
+- **Finalization** (`finalizePayroll` in `actions/payroll-finalization.ts`) recomputes gross server-side from attendance (never trusts the client), then per worker: `adjusted = gross + adjustment` (blocks if < 0), recovery clamped to `min(fresh outstanding, adjusted)`, `net_paid = adjusted − recovery`; writes snapshot (incl. `advanceRecovered`) + recovery row (if > 0) + ONE transaction (= net_paid), then sets `attendance.isLocked=true` for the site-month. **Hard gate (1.7 §5.2):** finalization is blocked while ANY cycle worker has a `pending` issuance. Neon **HTTP** driver has no interactive transactions/row locks — finalization is a sequential loop; over-recovery is prevented by the **§6 invariant backstop**: each recovery re-reads the worker's FRESH outstanding immediately before writing and clamps (reduce-only), so a concurrent finalize for the same worker can never over-recover. Locked attendance is rejected by 1.3 edit actions (`isLocked` guard in `actions/attendance.ts`)
 - `site_photos` (Module 1.6) — `siteId` + denormalized `cityId` are **NULLABLE**: a photo may be **site-less** (a "general" photo — brochure/process/material/team — uploaded without the `site` tag). When attached, the SITE owns the photo (`siteId` cascade-deletes with the site) and `cityId` snapshots the site's city at upload (never re-synced — matches `attendance`). `uploadedBy`/`hiddenBy` are `users` text FKs (attribution only). `tags` is `text[]` from a LOCKED vocabulary (`PHOTO_TAGS` in `lib/site-photos.ts` = `site, material, team, process, brochure`) — GIN-indexed for `&&`/`@>`. The **`site` tag is special**: choosing it requires attaching a site (enforced server-side). Upload logic is **identical for admin + supervisor**: no `site` tag ⇒ a site-less general photo; both may create them. **Visibility of site-less photos:** admins see all in the global gallery; a supervisor sees only the site-less photos **they** uploaded (in `/supervisor/gallery`, via `supervisorScope` = assigned-site photos OR own site-less). `takenAt` (timestamptz, nullable) parsed from EXIF server-side; sort everywhere is `COALESCE(taken_at, uploaded_at) DESC`. `isHidden` soft-hide (`hiddenAt`/`hiddenBy`); hidden rows excluded from default views, global gallery, dashboards — admin reveals via Include-hidden, supervisors never see hidden (even own). No approval flow; uploads blocked when site status ≠ `active`
 
 **⚠️ Two divergent OT wage formulas exist — reconcile before relying on either:**
@@ -460,16 +518,18 @@ Receives `(checked: boolean, event: Event)` — not just `boolean`.
 | 1.4-post Admin mgmt & polish | ✅ Done | Admin management at `/admin/admins` (create/edit-name/reset-password/deactivate/reactivate/remove) with self-action + last-active-admin guards; sidebar "Users" group (Admins + Supervisors), Workers kept separate; 2-hour hard session cap in `auth.ts`; branded favicon (optimized `icon.png`/`apple-icon.png`/`favicon.ico` in `app/`) |
 | 1.4-post Attendance Records redesign | ✅ Done | Admin Records reworked into a per-site-per-day ledger (one row per site/day: recorded-by supervisors tagged by session, worker/full-half/OT tallies, **Day Pay** via `lib/payroll` `computeRowWage`); shared `DayDetail` expand-in-place per-worker table reused by Records + Overview site-wise; single `AdminEditDialog` lifted to `AttendanceClient` (one `onEdit` for both tabs); Day Pay column added to Overview site-wise; site-wide date display standardized to DD/MM/YYYY via `formatDate`/`formatDateTime`. (Day Pay OT portion still inherits the `otRateSnapshot=2hr` quirk — see OT-formula note above) |
 | 1.4-post UX: archive/delete + action bars | ✅ Done | Worker **archive/restore** (soft delete, `archived` status) + permanent cascade **deleteWorker** (worker + attendance, type-to-confirm; archive required first when attendance exists); archived hidden from active/supervisor/attendance views and from the "All" worker filter. Site **deleteSite** (permanent cascade) + `DeleteSiteDialog`. Action-bar redesign on supervisors + sites tables: compact icon row for quick views, management/destructive actions moved into the detail dialog (`SupervisorDetailDialog`, `SiteDetailDialog`); supervisor list drops Age/Email cols, clubs Age-DOB in detail |
+| 1.5 Payroll Finalization | ✅ Done | `payroll_snapshots` + `transactions` tables (enums `transaction_type`/`transaction_direction`; partial unique index for one original per site-worker-month; self-FK correction chain). `actions/payroll-finalization.ts`: `isMonthFinalized`, `getUnfinalizedEarlierMonths`, `getFinalizationPreview`, `finalizePayroll` (recompute-server-side → snapshot + transaction per worker → lock attendance), `getFinalizedSnapshot`, `addPayrollCorrection`, `getFinalizedMonthsForSite`. Site overview gains Finalized(green)/In-Progress/Not-Finalized badges + Finalize button + locked-row→snapshot nav; finalization review page (adjustments + live totals + confirm); read-only locked snapshot view (corrections popover chips + per-row Add Correction); shared `AddCorrectionDialog`; worker earnings merges finalized `currentTotal` + Add Correction. All admin-only |
+| 1.7 Worker Advances | ✅ Done | `advances` typed ledger (enums `advance_type`/`advance_status`; balance-sum composite index; FK → `payroll_snapshots`) + `payroll_snapshots.advanceRecovered`. `lib/advances.ts` (`getOutstandingBalance`/`getOutstandingBalances`/`writeRecoveryRow`) + pure `computeMaxRecoverable`. `actions/advances.ts`: supervisor `submitAdvanceRequest` (scoped) + `getSupervisorWorkerBalances`/`getMyAdvanceRequests`; admin `getPendingAdvances`/`approveAdvance` (edit-approve)/`rejectAdvance`/`createAdvanceDirect`/`getActiveWorkerBalances`/`getAdvancesLedger`. Approval flow mirrors worker-creation. Finalization (`payroll-finalization.ts`) gains the pending-advance hard gate, per-worker outstanding/max-recoverable/recovery/net/carry-forward, net_paid math, recovery-row write, and §6 fresh-read clamp backstop. UI: `/supervisor/advances` (Balances + My Requests tabs) and `/admin/advances` (Balances default / Pending / History tabs + direct-entry); **dedicated Worker Balances pages** (`/{admin,supervisor}/balance`, sidebar "Balances" item, shared `BalanceList` + `getWorkerBalanceOverview`: per-worker Total Earned / Advance Taken / Balance + summary cards + search/city/balance-status filters); per-worker **statement** drill-down (shared `WorkerStatement`: Total Earned / Advance Taken / Due ± + month filter + line items) reachable from both Advances (`/{role}/advances/[workerId]`) and Balances (`/{role}/balance/workers/[id]`); finalization review gains recovery fields + block banner; snapshot view shows Recovered/Net Paid. Sidebar Advances + Balances items both roles |
 | 1.6 Site Photo Gallery | ✅ Done | `site_photos` table (GIN-indexed `tags`; `siteId`/`cityId` nullable for site-less general photos). Per-site galleries (`/admin` + `/supervisor`), admin global gallery (`/admin/gallery`), and a supervisor gallery (`/supervisor/gallery`, sidebar item) aggregating all assigned sites + the supervisor's own site-less photos (`supervisorScope`). Square grid + hover-reveal cards (color-coded tag pills) + lightbox. Tag-first batch upload — **identical for admin + supervisor** (≤10 photos / 10 MB each, dashed dropzone + preview grid, locked vocab `site/material/team/process/brochure`; `site` tag reveals the site picker, no `site` tag ⇒ site-less general photo; one description+tag set, `Promise.allSettled` partial-failure + retry), server-side EXIF `takenAt` (Asia/Kolkata fallback). Filters: Tag/Site/City/Uploader + Include-hidden (no date filter). Visibility + `canModifySitePhoto` enforced server-side (supervisor = currently-assigned sites + own site-less); per-row edit/hide, admin unhide + Cloudinary-first hard delete; dashboard previews (admin dense grid last 8 / supervisor scroll strip last 6 + Upload tile). Uploads blocked on non-active sites. `exifr` added |
 
 Full specs in `docs/modules/`.
 
 ## Modules planned (not started)
 
-- 1.5 Payroll Finalization
-- 1.7 Materials
 - 1.8 Expenses
 - 1.9 Reports
+
+**1.7 v2 deferred:** no `type='correction'` rows on advances (recovery corrections); true cross-request row-locking for recovery (would need the Neon WS/pooled driver — currently the §6 fresh-read clamp backstop is used instead).
 
 ---
 
@@ -489,6 +549,8 @@ pnpm exec tsx src/db/migrate-profile-bank-dob.ts   # Already run — drops worke
 pnpm exec tsx src/db/migrate-worker-archived.ts    # Already run — adds 'archived' to worker_status enum
 pnpm exec tsx src/db/migrate-site-photos.ts        # Already run — creates site_photos table + indexes (GIN on tags)
 pnpm exec tsx src/db/migrate-site-photos-nullable.ts  # Already run — makes site_photos.site_id + city_id nullable
+pnpm exec tsx src/db/migrate-payroll-finalization.ts  # Already run — creates payroll_snapshots + transactions + enums
+pnpm exec tsx src/db/migrate-advances.ts              # Already run — creates advances + enums; adds payroll_snapshots.advance_recovered
 pnpm exec tsx src/db/create-admin.ts          # Already run — creates ANURANJAN admin (idempotent)
 ```
 
@@ -507,4 +569,5 @@ pnpm exec tsx src/db/create-admin.ts          # Already run — creates ANURANJA
 - Import `validateAadhaar` from `@/lib/aadhaar-validate` (client-safe) — never from `@/lib/aadhaar` (server-only) in client components
 - Bank details (`accountNumber`/`ifscCode`) are **plaintext** (no encryption, no reveal log) but **admin-only**: strip them from any supervisor-facing payload (as `getWorkersForSupervisor` does) and never render them in supervisor forms/lists
 - `lib/cloudinary.ts` is server-only (`import 'server-only'`) — client components use `lib/cloudinary-url.ts` (transform helper) and the `PhotoUpload`/`Avatar` components; uploads/deletes go through server actions only
+- Advances (Module 1.7): role enforced **server-side on every action** — supervisors may only `submitAdvanceRequest` (and only for workers in their assigned-site cities; scope re-checked server-side), while approve/edit-approve/reject/direct-entry are admin-only. Outstanding balance is **always derived** from the ledger (never trust a client-sent balance). Recovery rows are written only by `finalizePayroll` (never a user action) and are immutable. The supervisor advances payload exposes only `{id, name, cityName}` for requestable workers — no bank/Aadhaar
 - Site gallery (Module 1.6): visibility is enforced **server-side on every query/action** — a supervisor sees only currently-assigned sites (plus their own site-less photos) and cannot reach another site's photos by URL. `canModifySitePhoto` (admin OR uploader: own site-less always / own site photo while still assigned) gates all hide/edit; unhide + hard-delete are admin-only. Hard delete is **Cloudinary-first** (`deleteImageStrict` throws on failure) so a DB row is never orphaned against a missing asset. `lib/exif.ts` is server-only; tags are validated against the locked vocabulary server-side

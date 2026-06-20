@@ -6,6 +6,7 @@ import { db } from '@/db'
 import { eq } from 'drizzle-orm'
 import { sites } from '@/db/schema'
 import { getSitePayrollOverview } from '@/actions/payroll'
+import { getFinalizedMonthsForSite } from '@/actions/payroll-finalization'
 import { SitePayrollOverview } from './SitePayrollOverview'
 
 interface Props {
@@ -18,7 +19,10 @@ export default async function SitePayrollPage({ params }: Props) {
 
   const { siteId } = await params
 
-  const overview = await getSitePayrollOverview(siteId)
+  const [overview, finalizedMonths] = await Promise.all([
+    getSitePayrollOverview(siteId),
+    getFinalizedMonthsForSite(siteId),
+  ])
 
   if (!overview) {
     // Fetch minimal site details for the header even when there is no attendance data
@@ -42,5 +46,11 @@ export default async function SitePayrollPage({ params }: Props) {
     )
   }
 
-  return <SitePayrollOverview site={overview} months={overview.months.map((m) => ({ value: m.yearMonth, label: m.label }))} />
+  return (
+    <SitePayrollOverview
+      site={overview}
+      months={overview.months.map((m) => ({ value: m.yearMonth, label: m.label }))}
+      finalizedMonths={finalizedMonths}
+    />
+  )
 }

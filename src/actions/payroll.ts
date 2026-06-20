@@ -1,7 +1,7 @@
 'use server'
 
 import { db } from '@/db'
-import { attendance, workers } from '@/db/schema'
+import { attendance, workers, payrollSnapshots } from '@/db/schema'
 import { auth } from '@/lib/auth'
 import { headers } from 'next/headers'
 import { and, eq, gte, lte, inArray } from 'drizzle-orm'
@@ -351,6 +351,22 @@ export async function getWorkerLifetimeEarnings(
     siteGroups[siteId].monthGroups[yearMonth].push(row)
   }
 
+  // Merge in finalized snapshots (1.5): for any finalized site-month, the
+  // locked currentTotal (final + corrections) replaces the live computation.
+  const snaps = await db.query.payrollSnapshots.findMany({
+    where: eq(payrollSnapshots.workerId, workerId),
+  })
+  const originals = snaps.filter((s) => !s.isCorrection)
+  const corrections = snaps.filter((s) => s.isCorrection)
+  // key `${siteId}:${yearMonth}` → currentTotal (final + sum of its corrections)
+  const finalizedTotals = new Map<string, number>()
+  for (const o of originals) {
+    const correctionsTotal = corrections
+      .filter((c) => c.correctionOf === o.id)
+      .reduce((sum, c) => sum + Number(c.finalWage), 0)
+    finalizedTotals.set(`${o.siteId}:${o.yearMonth}`, Number(o.finalWage) + correctionsTotal)
+  }
+
   const sites = Object.entries(siteGroups).map(([siteId, siteData]) => {
     const months = Object.entries(siteData.monthGroups)
       .sort(([a], [b]) => b.localeCompare(a))
@@ -377,11 +393,16 @@ export async function getWorkerLifetimeEarnings(
           if (row.ot === '4hr') otFourHr++
         }
 
+        // Finalized months use the locked total (final + corrections), not live wage.
+        const finalizedTotal = finalizedTotals.get(`${siteId}:${yearMonth}`)
+        const isFinalized = finalizedTotal !== undefined
+
         return {
           yearMonth,
           label: formatYearMonth(yearMonth),
           isCurrentMonth: isCurrentMonth(yearMonth),
-          totalWage,
+          isFinalized,
+          totalWage: isFinalized ? finalizedTotal! : totalWage,
           fullDays,
           halfDays,
           otTwoHr,

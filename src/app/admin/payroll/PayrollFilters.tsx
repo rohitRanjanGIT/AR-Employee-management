@@ -1,6 +1,12 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from '@/components/ui/select'
 
 export type FilterOptions = {
   states: { id: string; name: string }[]
@@ -16,8 +22,9 @@ export type Filters = {
   yearMonth?: string
 }
 
-const selectClass =
-  'rounded-lg border border-input bg-transparent px-3 py-1.5 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/30'
+// base-nova Select uses a sentinel for the "all" option (empty-string values
+// are not supported); it maps back to `undefined` in the filter state.
+const ALL = 'all'
 
 export function PayrollFilters({
   options,
@@ -46,77 +53,101 @@ export function PayrollFilters({
   const hasAny =
     filters.stateId || filters.cityId || filters.siteId || filters.yearMonth
 
+  // base-nova Select renders the raw value in the trigger, so the label is
+  // derived from the controlled filter state on every render.
+  const stateName = options.states.find((s) => s.id === filters.stateId)?.name ?? 'All States'
+  const cityName = cities.find((c) => c.id === filters.cityId)?.name ?? 'All Cities'
+  const siteObj = sites.find((s) => s.id === filters.siteId)
+  const siteName = siteObj ? `${siteObj.name} (${siteObj.code})` : 'All Sites'
+  const monthName = options.months.find((m) => m.value === filters.yearMonth)?.label ?? 'All Months'
+
   return (
     <div className="flex flex-wrap items-center gap-3">
       {/* State — clearing it clears city + site */}
-      <select
-        className={selectClass}
-        value={filters.stateId ?? ''}
-        onChange={(e) => {
-          const stateId = e.target.value || undefined
+      <Select
+        value={filters.stateId ?? ALL}
+        onValueChange={(v) => {
+          const stateId = !v || v === ALL ? undefined : v
           onChange({ ...filters, stateId, cityId: undefined, siteId: undefined })
         }}
       >
-        <option value="">All States</option>
-        {options.states.map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.name}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger className="w-40">
+          <span className="text-sm">{stateName}</span>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL}>All States</SelectItem>
+          {options.states.map((s) => (
+            <SelectItem key={s.id} value={s.id}>
+              {s.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       {/* City — clearing it clears site */}
-      <select
-        className={selectClass}
-        value={filters.cityId ?? ''}
-        onChange={(e) => {
-          const cityId = e.target.value || undefined
+      <Select
+        value={filters.cityId ?? ALL}
+        onValueChange={(v) => {
+          const cityId = !v || v === ALL ? undefined : v
           onChange({ ...filters, cityId, siteId: undefined })
         }}
       >
-        <option value="">All Cities</option>
-        {cities.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger className="w-40">
+          <span className="text-sm">{cityName}</span>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL}>All Cities</SelectItem>
+          {cities.map((c) => (
+            <SelectItem key={c.id} value={c.id}>
+              {c.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       {/* Site */}
       {!hideSite && (
-        <select
-          className={selectClass}
-          value={filters.siteId ?? ''}
-          onChange={(e) => {
-            const siteId = e.target.value || undefined
+        <Select
+          value={filters.siteId ?? ALL}
+          onValueChange={(v) => {
+            const siteId = !v || v === ALL ? undefined : v
             onChange({ ...filters, siteId })
           }}
         >
-          <option value="">All Sites</option>
-          {sites.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name} ({s.code})
-            </option>
-          ))}
-        </select>
+          <SelectTrigger className="w-48">
+            <span className="text-sm">{siteName}</span>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All Sites</SelectItem>
+            {sites.map((s) => (
+              <SelectItem key={s.id} value={s.id}>
+                {s.name} ({s.code})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       )}
 
       {/* Month — independent, never cleared by other filters */}
-      <select
-        className={selectClass}
-        value={filters.yearMonth ?? ''}
-        onChange={(e) => {
-          const yearMonth = e.target.value || undefined
+      <Select
+        value={filters.yearMonth ?? ALL}
+        onValueChange={(v) => {
+          const yearMonth = !v || v === ALL ? undefined : v
           onChange({ ...filters, yearMonth })
         }}
       >
-        <option value="">All Months</option>
-        {options.months.map((m) => (
-          <option key={m.value} value={m.value}>
-            {m.label}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger className="w-40">
+          <span className="text-sm">{monthName}</span>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL}>All Months</SelectItem>
+          {options.months.map((m) => (
+            <SelectItem key={m.value} value={m.value}>
+              {m.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       {hasAny && (
         <Button variant="ghost" size="sm" onClick={() => onChange({})}>

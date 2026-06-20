@@ -1,8 +1,9 @@
 TO-DO:
 
 1. also mark the time when the attendanece is bein marked, so that when the attendance is marked late the admin can view when the attendance was marked
-2. in the gallery feature, after uploading a new image, its not loaded automatically, have to reload the page.  
-3. loader in login. 
+2. in the gallery feature, after uploading a new image, its not loaded automatically, have to reload the page.
+3. loader in login.
+4. 
 
 DONE:
 - Edit supervisor loads original data — confirmed EditSupervisorDialog uses react-hook-form `values` prop so all fields (name, phone, join date, salary, home city) pre-fill from the selected supervisor; removed leftover dead no-op code

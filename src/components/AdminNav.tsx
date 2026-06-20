@@ -5,6 +5,7 @@ import {
   Building2,
   CalendarDays,
   Gauge,
+  HandCoins,
   HardHat,
   Images,
   IndianRupee,
@@ -14,6 +15,7 @@ import {
   ShieldCheck,
   Users,
   UserRoundCog,
+  Wallet,
 } from 'lucide-react'
 import { AppSidebar, type NavEntry } from '@/components/AppSidebar'
 
@@ -39,6 +41,8 @@ const navItems: NavEntry[] = [
   { label: 'Workers', href: '/admin/workers', icon: HardHat },
   { label: 'Attendance', href: '/admin/attendance', icon: CalendarDays },
   { label: 'Payroll', href: '/admin/payroll', icon: IndianRupee },
+  { label: 'Advances', href: '/admin/advances', icon: HandCoins },
+  { label: 'Balances', href: '/admin/balance', icon: Wallet },
   { label: 'Gallery', href: '/admin/gallery', icon: Images },
   { label: 'Settings', href: '/settings', icon: Settings },
 ]

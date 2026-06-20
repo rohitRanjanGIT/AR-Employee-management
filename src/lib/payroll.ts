@@ -37,6 +37,15 @@ export function computeRowWage({
   return base + otAmount
 }
 
+/**
+ * Module 1.7 — the most an advance balance can be recovered against a wage.
+ * max_recoverable = min(outstandingBalance, adjustedWage), floored at 0.
+ * Pure (no DB). adjustedWage is expected to already be >= 0 by the caller's guard.
+ */
+export function computeMaxRecoverable(adjustedWage: number, outstandingBalance: number): number {
+  return Math.max(0, Math.min(outstandingBalance, adjustedWage))
+}
+
 // ─── Formatting ─────────────────────────────────────────────────────────────────
 
 /**

@@ -14,10 +14,12 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { getWorkerLifetimeEarnings } from '@/actions/payroll'
-import { formatINR } from '@/lib/payroll'
+import { formatINR, formatYearMonth } from '@/lib/payroll'
 import { PayrollFilters, type FilterOptions, type Filters } from '../../PayrollFilters'
 import { MonthStatusBadge } from '../../MonthStatusBadge'
 import { CATEGORY_LABELS } from '../../types'
+import { Button } from '@/components/ui/button'
+import { AddCorrectionDialog, type CorrectionContext } from '@/components/AddCorrectionDialog'
 
 type WorkerEarnings = {
   workerId: string
@@ -36,6 +38,7 @@ type WorkerEarnings = {
       yearMonth: string
       label: string
       isCurrentMonth: boolean
+      isFinalized: boolean
       totalWage: number
       fullDays: number
       halfDays: number
@@ -45,8 +48,19 @@ type WorkerEarnings = {
   }[]
 }
 
-function SiteCard({ site }: { site: WorkerEarnings['sites'][0] }) {
+function SiteCard({
+  site,
+  workerId,
+  workerName,
+  onAddCorrection,
+}: {
+  site: WorkerEarnings['sites'][0]
+  workerId: string
+  workerName: string
+  onAddCorrection: (ctx: CorrectionContext) => void
+}) {
   const [expanded, setExpanded] = useState(false)
+  const siteLabel = `${site.siteName} (${site.siteCode})`
 
   return (
     <Card>
@@ -89,6 +103,7 @@ function SiteCard({ site }: { site: WorkerEarnings['sites'][0] }) {
                   <TableHead className="text-right">OT 4hr</TableHead>
                   <TableHead className="text-right">Wages</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -101,7 +116,32 @@ function SiteCard({ site }: { site: WorkerEarnings['sites'][0] }) {
                     <TableCell className="text-right">{m.otFourHr}</TableCell>
                     <TableCell className="text-right font-medium">{formatINR(m.totalWage)}</TableCell>
                     <TableCell>
-                      <MonthStatusBadge isCurrentMonth={m.isCurrentMonth} isFinalized={false} />
+                      <MonthStatusBadge
+                        isCurrentMonth={m.isCurrentMonth}
+                        isFinalized={m.isFinalized}
+                      />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {m.isFinalized ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            onAddCorrection({
+                              siteId: site.siteId,
+                              workerId,
+                              yearMonth: m.yearMonth,
+                              workerName,
+                              siteLabel,
+                              monthLabel: formatYearMonth(m.yearMonth),
+                            })
+                          }
+                        >
+                          Add Correction
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -126,6 +166,13 @@ export function WorkerEarningsOverview({
   const [filters, setFilters] = useState<Filters>({})
   const [data, setData] = useState<WorkerEarnings>(initialData)
   const [isPending, startTransition] = useTransition()
+  const [correctionCtx, setCorrectionCtx] = useState<CorrectionContext | null>(null)
+  const [dialogOpen, setDialogOpen] = useState(false)
+
+  function openCorrection(ctx: CorrectionContext) {
+    setCorrectionCtx(ctx)
+    setDialogOpen(true)
+  }
 
   function applyFilters(next: Filters) {
     setFilters(next)
@@ -181,7 +228,13 @@ export function WorkerEarningsOverview({
       ) : (
         <div className="space-y-3">
           {data.sites.map((site) => (
-            <SiteCard key={site.siteId} site={site} />
+            <SiteCard
+              key={site.siteId}
+              site={site}
+              workerId={workerId}
+              workerName={data.workerName}
+              onAddCorrection={openCorrection}
+            />
           ))}
         </div>
       )}
@@ -195,6 +248,8 @@ export function WorkerEarningsOverview({
           Total: <span className="font-semibold">{formatINR(data.totalWageAllTime)}</span>
         </p>
       </div>
+
+      <AddCorrectionDialog context={correctionCtx} open={dialogOpen} onOpenChange={setDialogOpen} />
     </div>
   )
 }

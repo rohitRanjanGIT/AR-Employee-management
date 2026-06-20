@@ -2,8 +2,10 @@
 
 import { Fragment, useState } from 'react'
 import Link from 'next/link'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { ChevronDown, ChevronRight, Lock } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Table,
   TableBody,
@@ -66,12 +68,18 @@ function WorkerBreakdownTable({ month }: { month: MonthBreakdown }) {
 export function SitePayrollOverview({
   site,
   months,
+  finalizedMonths,
 }: {
   site: ConsolidatedSite
   months: { value: string; label: string }[]
+  finalizedMonths: string[]
 }) {
+  const router = useRouter()
   const [monthFilter, setMonthFilter] = useState('')
   const [openMonths, setOpenMonths] = useState<Set<string>>(new Set())
+
+  const finalizedSet = new Set(finalizedMonths)
+  const isFinalized = (yearMonth: string) => finalizedSet.has(yearMonth)
 
   function toggleMonth(yearMonth: string) {
     setOpenMonths((prev) => {
@@ -80,6 +88,24 @@ export function SitePayrollOverview({
       else next.add(yearMonth)
       return next
     })
+  }
+
+  function snapshotHref(yearMonth: string) {
+    return `/admin/payroll/sites/${site.siteId}/snapshot/${yearMonth}`
+  }
+
+  function finalizeHref(yearMonth: string) {
+    return `/admin/payroll/sites/${site.siteId}/finalize/${yearMonth}`
+  }
+
+  function handleRowClick(m: MonthBreakdown) {
+    // Finalized months are read-only — clicking jumps to the locked snapshot
+    // rather than expanding a live (re-computable) breakdown.
+    if (isFinalized(m.yearMonth)) {
+      router.push(snapshotHref(m.yearMonth))
+    } else {
+      toggleMonth(m.yearMonth)
+    }
   }
 
   const visibleMonths = monthFilter
@@ -143,12 +169,13 @@ export function SitePayrollOverview({
                 Worker Wages
               </TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {visibleMonths.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="h-20 text-center text-muted-foreground">
+                <TableCell colSpan={10} className="h-20 text-center text-muted-foreground">
                   No data for the selected month.
                 </TableCell>
               </TableRow>
@@ -158,12 +185,15 @@ export function SitePayrollOverview({
                 const halfDays = m.workers.reduce((s, w) => s + w.halfDays, 0)
                 const otTwoHr = m.workers.reduce((s, w) => s + w.otTwoHr, 0)
                 const otFourHr = m.workers.reduce((s, w) => s + w.otFourHr, 0)
+                const finalized = isFinalized(m.yearMonth)
                 const isOpen = openMonths.has(m.yearMonth)
                 return (
                   <Fragment key={m.yearMonth}>
-                    <TableRow className="cursor-pointer" onClick={() => toggleMonth(m.yearMonth)}>
+                    <TableRow className="cursor-pointer" onClick={() => handleRowClick(m)}>
                       <TableCell>
-                        {isOpen ? (
+                        {finalized ? (
+                          <Lock className="size-4 text-green-600 dark:text-green-500" />
+                        ) : isOpen ? (
                           <ChevronDown className="size-4 text-muted-foreground" />
                         ) : (
                           <ChevronRight className="size-4 text-muted-foreground" />
@@ -179,13 +209,35 @@ export function SitePayrollOverview({
                       <TableCell>
                         <MonthStatusBadge
                           isCurrentMonth={m.isCurrentMonth}
-                          isFinalized={m.isFinalized}
+                          isFinalized={finalized}
                         />
                       </TableCell>
+                      <TableCell
+                        className="text-right"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {finalized ? (
+                          <Link
+                            href={snapshotHref(m.yearMonth)}
+                            className="text-sm text-primary hover:underline"
+                          >
+                            View Snapshot
+                          </Link>
+                        ) : m.isCurrentMonth ? (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        ) : (
+                          <Button
+                            size="sm"
+                            render={<Link href={finalizeHref(m.yearMonth)} />}
+                          >
+                            Finalize Payroll
+                          </Button>
+                        )}
+                      </TableCell>
                     </TableRow>
-                    {isOpen && (
+                    {!finalized && isOpen && (
                       <TableRow>
-                        <TableCell colSpan={9} className="p-2">
+                        <TableCell colSpan={10} className="p-2">
                           <WorkerBreakdownTable month={m} />
                         </TableCell>
                       </TableRow>
