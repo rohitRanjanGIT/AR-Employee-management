@@ -1,36 +1,92 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Anuranjan EMS (AR-Employee-management)
 
-## Getting Started
+Anuranjan EMS is a role-based employee and workforce operations system for managing workers, supervisors, attendance, payroll workflows, and site operations.
 
-First, run the development server:
+It is built as a Next.js App Router application with a TypeScript-first stack and PostgreSQL-backed data model.
+
+## What this project is about
+
+This repository implements an internal operations platform focused on:
+
+- **Role-based operations** for **Admin** and **Supervisor** users
+- **City/Site management** with supervisor assignments
+- **Worker lifecycle** (creation, review/approval, status transitions)
+- **Attendance tracking** (morning/evening marking, edit-request workflows)
+- **Payroll flow integration** and advance-recovery logic
+- **Site photo gallery** for operational visibility
+- **Secure handling of sensitive worker identity data** (Aadhaar encryption at rest)
+
+The docs in `docs/modules` define the system in modular phases (1.0 onward), including scope boundaries, data model expectations, and implementation notes.
+
+## Core user roles
+
+### Admin
+- Full visibility across cities/sites/workers/attendance
+- Can approve or reject supervisor-submitted records
+- Can manage supervisors and platform-wide configuration
+- Can review and control attendance edit requests
+
+### Supervisor
+- Operates within currently assigned sites/cities
+- Can submit worker records, mark attendance, and perform scoped operational tasks
+- Access is intentionally restricted by assignment and role guards
+
+## Tech stack
+
+- **Framework:** Next.js (App Router)
+- **Language:** TypeScript
+- **UI:** Tailwind CSS v4 + shadcn/ui (`base-nova` style on `@base-ui/react`)
+- **State/Data:** TanStack Query, TanStack Table
+- **Forms/Validation:** react-hook-form + Zod
+- **Auth:** better-auth (role-aware sessions)
+- **Database:** PostgreSQL (Neon) with Drizzle ORM
+- **Media:** Cloudinary (for profile/site gallery images)
+
+## Security & data handling highlights
+
+- Aadhaar values are encrypted at rest (AES-256-GCM utility flow described in module docs)
+- Masked display patterns for sensitive fields
+- Server-side authorization checks on role-scoped actions
+- Audit-oriented behavior for sensitive access paths (as defined by module specs)
+
+## Project documentation
+
+Primary documentation lives in:
+
+- `docs/modules/` – functional module specs and rollout units
+- `docs/design/` – UI/design system extraction and feature design docs
+
+Useful starting docs:
+
+- `docs/modules/module-1.0-foundation.md`
+- `docs/modules/module-1.1-cities-and-sites.md`
+- `docs/modules/module-1.2-workers.md`
+- `docs/modules/module-1.3-attendance.md`
+- `docs/modules/module-1.6-site-photo-gallery.md`
+- `docs/modules/module-1.7-worker-advances.md`
+- `docs/design/DESIGN-SYSTEM.md`
+
+## Development
+
+Install dependencies and run locally:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then open:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- http://localhost:3000
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Environment
 
-## Learn More
+Set required environment variables (as documented in module foundation docs), including:
 
-To learn more about Next.js, take a look at the following resources:
+- `DATABASE_URL`
+- `BETTER_AUTH_SECRET`
+- `BETTER_AUTH_URL`
+- `NEXT_PUBLIC_APP_URL`
+- `AADHAAR_ENCRYPTION_KEY`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Refer to `docs/modules/module-1.0-foundation.md` for expected setup details and validation guidance.
